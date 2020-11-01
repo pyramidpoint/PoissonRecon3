@@ -666,7 +666,11 @@ int Octree<Degree>::SolveFixedDepthMatrix(const int& depth,const SortedTreeNodes
 	iter+=SparseSymmetricMatrix<Real>::Solve(matrix,V,int(pow(matrix.rows,ITERATION_POWER)),Solution,double(EPSILON),1);
 	sTime=Time()-sTime;
 	uTime=Time();
-	//for(i=sNodes.nodeCount[depth];i<sNodes.nodeCount[depth+1];i++){sNodes.treeNodes[i]->nodeData.value=Real(Solution[i-sNodes.nodeCount[depth]]);}
+	for (int i = sNodes.nodeCount[depth]; i < sNodes.nodeCount[depth + 1]; i++)
+	{
+		fprintf(fp, "%f\n", Real(Solution[i - sNodes.nodeCount[depth]]));
+	}
+	for(i=sNodes.nodeCount[depth];i<sNodes.nodeCount[depth+1];i++){sNodes.treeNodes[i]->nodeData.value=Real(Solution[i-sNodes.nodeCount[depth]]);}
 	for (i = sNodes.nodeCount[depth]; i<sNodes.nodeCount[depth + 1]; i++) { sNodes.treeNodes[i]->b = Real(Solution[i - sNodes.nodeCount[depth]]); }
 	myRadius=Real(radius+ROUND_EPS-0.5);
 	myRadius /=(1<<depth);
@@ -929,6 +933,7 @@ void Octree<Degree>::SetLaplacianWeights(void){
 		}
 		int d=temp->depth();
 		df.normal=(*normals)[temp->nodeData.nodeIndex];
+		//printf("%f %f %f\n", df.normal.coords[0], df.normal.coords[1], df.normal.coords[2]);
 		df.index[0]=int(temp->off[0]);
 		df.index[1]=int(temp->off[1]);
 		df.index[2]=int(temp->off[2]);
@@ -963,6 +968,7 @@ void Octree<Degree>::ComputeDivergence(void)
 		}
 		int d = temp->depth();
 		df.normal = (*normals)[temp->nodeData.nodeIndex];
+		
 		df.index[0] = int(temp->off[0]);
 		df.index[1] = int(temp->off[1]);
 		df.index[2] = int(temp->off[2]);
@@ -1039,29 +1045,31 @@ void Octree<Degree>::DivergenceFunction::computedivergence(TreeOctNode* node1, c
 		BinaryNode<double>::CenterAndWidth(off2[i], c2[i], w2[i]);
 	}
 	//º∆À„…¢∂»
-	PPolynomial<Degree> basefunction1 = ot->fData.baseFunction;
-	PPolynomial<Degree> base1 = basefunction1.scale(w2[0]).shift(c2[0]);
+	PPolynomial<Degree> basefunction = ot->fData.baseFunction;
+	PPolynomial<Degree> base1 = basefunction.scale(w2[0]).shift(c2[0]);
 	//printf("%f %f %f\n", base(c2), base(c1),basefunction((c1-c2)/w2));
 	PPolynomial<Degree - 1> dbasefunction1 = base1.derivative();
 
+	PPolynomial<Degree - 1> dbase = basefunction.derivative();
+	
 
-
-	PPolynomial<Degree> basefunction2 = ot->fData.baseFunction;
-	PPolynomial<Degree> base2 = basefunction2.scale(w2[1]).shift(c2[1]);
+	
+	PPolynomial<Degree> base2 = basefunction.scale(w2[1]).shift(c2[1]);
 	//printf("%f %f %f\n", base(c2), base(c1),basefunction((c1-c2)/w2));
 	PPolynomial<Degree - 1> dbasefunction2 = base2.derivative();
 
 
 
-	PPolynomial<Degree> basefunction3 = ot->fData.baseFunction;
-	PPolynomial<Degree> base3 = basefunction3.scale(w2[2]).shift(c2[2]);
+	
+	PPolynomial<Degree> base3 = basefunction.scale(w2[2]).shift(c2[2]);
 	//printf("%f %f %f\n", base(c2), base(c1),basefunction((c1-c2)/w2));
 	PPolynomial<Degree - 1> dbasefunction3 = base3.derivative();
 	////printf("off %d %d %d %d %d %d\n", off2[0], off2[1], off2[2], index[0], index[1], index[2]);
 	//printf("off %d %d %d %d %d %d\n", off2[0], off2[1], off2[2], off1[0], off1[1], off1[2]);
-	//printf("%f %f %f %f %f %f\n", dbasefunction1(c1[0]), dbasefunction2(c1[1]), dbasefunction3(c1[2]), base1(c1[0]), base2(c1[1]), base3(c1[2]));
-
+	printf("dbase %f %f %f base %f %f %f c1 %f %f %f %f %f %f \n", dbasefunction1(c1[0]), dbasefunction2(c1[1]), dbasefunction3(c1[2]), base1(c1[0]), base2(c1[1]), base3(c1[2]), dbase((c1[0]-c2[0])/w2[0]), dbase((c1[1] - c2[1]) / w2[1]), dbase((c1[2] - c2[2]) / w2[2]),basefunction((c1[0] - c2[0]) / w2[0]),basefunction((c1[1] - c2[1]) / w2[1]),basefunction((c1[2] - c2[2]) / w2[0]));
+	//printf("%f %f %f\n", n.coords[0], n.coords[1], n.coords[2]);
 	divergence = dbasefunction1(c1[0])*base2(c1[1])*base3(c1[2])*n.coords[0] + base1(c1[0])*dbasefunction2(c1[1])*base3(c1[2])*n.coords[1] + base1(c1[0])*base2(c1[1])*dbasefunction3(c1[2])*n.coords[2];
+	//printf("%f\n", divergence);
 	node1->divergence += -divergence;
 }
 
