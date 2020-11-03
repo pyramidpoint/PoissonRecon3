@@ -105,6 +105,26 @@ class Octree{
 		void computeB(TreeOctNode *node1, const TreeOctNode*node2);
 	};
 
+	class MyDivergenceFuntion {
+	public:
+		int index[DIMENSION];
+		Octree<Degree>* ot;
+		int nodeIndex;
+		void Function(TreeOctNode *node1, const TreeOctNode *node2, double *divergence_normal_Value, int *divergence_normal_SampleIndex, int *divergence_normal_EachLength, int *sizeOfDivergence,int column);
+	};
+
+
+	class GreenFunction {
+	public:
+		Real center2[DIMENSION];
+		Real width2;
+		
+		void Function(TreeOctNode *node1,const TreeOctNode *node2, double *divergence_normal_Value, int *divergence_normal_SampleIndex, int * divergence_normal_EachLength, double *coefficient, int *coefficient_SampleIndex,int * coefficient_EachLength, int *sizeOfcoefficient, int column);
+	
+	};
+
+
+
 	class LaplacianProjectionFunction{
 	public:
 		double value;
@@ -249,6 +269,7 @@ public:
 	void SetLaplacianWeights(void);
 	void ComputeDivergence(void);
 	void ComputeB(void);
+	void GreenMethod(void);
 	void ClipTree(void);
 	int LaplacianMatrixIteration(const int& subdivideDepth);
 

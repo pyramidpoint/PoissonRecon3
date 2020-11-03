@@ -28,7 +28,17 @@ DAMAGE.
 
 #include "Octree.h"
 #include "time.h"
+#include<time.h>
 #include "MemoryUsage.h"
+#include <stdio.h>
+#include <fstream>
+#include<Eigen/Sparse>
+#include<Eigen/IterativeLinearSolvers>
+#include<Eigen/SparseCholesky>
+#include <cmath>
+#include "cuda_runtime.h"
+#include "device_launch_parameters.h"
+#include<stdlib.h>
 
 #define ITERATION_POWER 1.0/3
 #define MEMORY_ALLOCATOR_BLOCK_SIZE 1<<12
@@ -409,6 +419,7 @@ int Octree<Degree>::setTree(char* fileName,const int& maxDepth,const int& binary
 
 	DumpOutput("Adding Points and Normals\n");
 	normals=new std::vector<Point3D<Real> >();
+	ngbr
 	cnt=0;
 	fseek(fp,SEEK_SET,0);
 	while(1){
@@ -435,6 +446,7 @@ int Octree<Degree>::setTree(char* fileName,const int& maxDepth,const int& binary
 		normal.coords[2]*=l;
 
 		if(resetSamples && samplesPerNode>0 && splatDepth){
+			//printf("11\n");
 			NonLinearSplatOrientedPoint(position,normal,splatDepth,samplesPerNode,1,maxDepth);
 		}
 		else{
@@ -933,6 +945,7 @@ void Octree<Degree>::SetLaplacianWeights(void){
 		}
 		int d=temp->depth();
 		df.normal=(*normals)[temp->nodeData.nodeIndex];
+		// printf("%d \n", d);
 		//printf("%f %f %f\n", df.normal.coords[0], df.normal.coords[1], df.normal.coords[2]);
 		df.index[0]=int(temp->off[0]);
 		df.index[1]=int(temp->off[1]);
@@ -952,6 +965,141 @@ void Octree<Degree>::SetLaplacianWeights(void){
 	delete normals;
 	normals=NULL;
 }
+
+
+template<int Degree>
+void Octree<Degree>::GreenMethod(void)
+{
+	//计算散度
+	int size_sample = (*normals).size();
+	int size_normal = size_sample * 8;
+	int size_col = 300;
+	//声明法向量散度的值
+	double *divergence_normal_Value = NULL;
+	divergence_normal_Value = (double *)malloc(size_normal * size_col * 3 * sizeof(double));
+	if (divergence_normal_Value == NULL)
+	{
+		printf("divergence_normal_Value malloc failed\n");
+	}
+	memset(divergence_normal_Value, 0, size_normal * size_col * 3 * sizeof(double));
+	printf("compute divergence\n");
+	//声明法向量散度对应的sample的索引
+	int *divergence_normal_SampleIndex = NULL;
+	divergence_normal_SampleIndex = (int *)malloc(size_normal * size_col * 3 * sizeof(int));
+	if (divergence_normal_SampleIndex == NULL)
+	{
+		printf("divergence_normla_SampleIndex malloc failed\n");
+	}
+	memset(divergence_normal_SampleIndex, 0, size_normal * size_col * 3 * sizeof(int));
+
+	//声明每一个法向量散度值的长度
+	int *divergence_normal_EachLength = NULL;
+	divergence_normal_EachLength = (int *)malloc(size_normal * sizeof(int));
+	if (divergence_normal_EachLength == NULL)
+	{
+		printf("divergence_normal_EachLength malloc failed\n");
+	}
+	memset(divergence_normal_EachLength, 0, size_normal * sizeof(int));
+	//sizeOfDivergence 记录实际产生divergence域的容量
+	int *sizeOfDivergence = NULL;
+	sizeOfDivergence = (int *)malloc(sizeof(int));
+	if (sizeOfDivergence == NULL)
+	{
+		printf("sizeOfDivergence malloc failed\n");
+	}
+	*sizeOfDivergence = 0;
+	TreeOctNode* temp;
+	MyDivergenceFuntion mf;
+	temp = tree.nextNode();
+	int num = 0;
+	while (temp)
+	{
+		if (temp->nodeData.nodeIndex<0 || Length((*normals)[temp->nodeData.nodeIndex]) <= EPSILON) {
+			temp = tree.nextNode(temp);
+			continue;
+		}
+		mf.ot = this;
+		mf.index[0] = int(temp->off[0]);
+		mf.index[1] = int(temp->off[1]);
+		mf.index[2] = int(temp->off[2]);
+		mf.nodeIndex = temp->nodeData.nodeIndex;
+		TreeOctNode::ProcessNodeAdjacentNodesTocomputeMydivergence(fData.depth, temp, width, &tree, width, &mf,divergence_normal_Value,divergence_normal_SampleIndex,divergence_normal_EachLength,sizeOfDivergence,size_col*3);
+		temp = tree.nextNode(temp);
+		num++;
+	}
+	printf("%d %d\n", *sizeOfDivergence,num);
+
+
+
+
+	//计算f(x)和f(x)''(二阶导)
+	double * coefficient = NULL;
+	coefficient = (double *)malloc(size_normal * 7 * size_col * 3 * sizeof(double));
+	if (coefficient == NULL)
+	{
+		printf("coefficient malloc failed\n");
+	}
+	memset(coefficient, 0, size_normal * 7 * size_col * 3 * sizeof(double));
+
+	//系数矩阵中每一行对应样本的索引
+	int * coefficient_SampleIndex = NULL;
+	coefficient_SampleIndex = (int *)malloc(size_normal * 7 * size_col * 3 * sizeof(int));
+	if (coefficient_SampleIndex == NULL)
+	{
+		printf("coefficient_SampleIndex malloc failed\n");
+	}
+	memset(coefficient_SampleIndex, 0, size_normal * 7 * size_col * 3 * sizeof(int));
+
+	//系数矩阵中每一行值不为0的数量
+	int * coefficient_EachLength = NULL;
+	coefficient_EachLength = (int *)malloc(size_normal * 7 * sizeof(int));
+	if (coefficient_EachLength == NULL)
+	{
+		printf("coefficient_EachLengh malloc failed\n");
+	}
+	memset(coefficient_EachLength, 0, size_normal * 7 * sizeof(int));
+	
+	int *sizeOfcoefficient = NULL;
+	sizeOfcoefficient = (int *)malloc(sizeof(int));
+	if (sizeOfcoefficient == NULL)
+	{
+		printf("sizeOfcoefficient malloc failed\n");
+	}
+	*sizeOfcoefficient = 0;
+
+
+
+	SortedTreeNodes sNodes;
+	
+	sNodes.set(tree, 1);
+
+	GreenFunction gf;
+	temp = tree.nextNode();
+	//int num = 0;
+	num=0;
+	while (temp)
+	{
+		if (temp->indexOfdivergence == -1) {
+			temp = tree.nextNode(temp);
+			continue;
+		}
+		Point3D<Real> center2 = Point3D<Real>{ 0,0,0 };
+		Real width2=0;
+		temp->centerAndWidth(center2, width2);
+		gf.center2[0] = center2.coords[0];
+		gf.center2[1] = center2.coords[1];
+		gf.center2[2] = center2.coords[2];
+		gf.width2 = width2;
+		TreeOctNode::ProcessNodeAdjacentNodesTocomputeMyFunctionByGreen(fData.depth, temp, width, &tree, width, &gf, divergence_normal_Value, divergence_normal_SampleIndex, divergence_normal_EachLength, coefficient, coefficient_SampleIndex, coefficient_EachLength, sizeOfcoefficient, size_col * 3);
+		temp = tree.nextNode(temp);
+		num++;
+	}
+	printf("num of divergence %d\n",num);
+	
+
+}
+
+
 template<int Degree>
 void Octree<Degree>::ComputeDivergence(void)
 {
@@ -991,10 +1139,13 @@ void Octree<Degree>::ComputeB(void)
 	fData.setDotTables(fData.DOT_FLAG | fData.D_DOT_FLAG);
 	DivergenceFunction df;
 	df.ot = this;
+
 	temp = tree.nextNode();
 	int num = 0;
+
 	while (temp) {
-		if (temp->nodeData.nodeIndex<0 || fabs(temp->divergence) == 0) {
+		if (temp->divergence == 0) {
+			//printf("temp->divergence %f\n", temp->divergence);
 			temp = tree.nextNode(temp);
 			//num++;
 			continue;
@@ -1004,7 +1155,7 @@ void Octree<Degree>::ComputeB(void)
 		df.index[1] = int(temp->off[1]);
 		df.index[2] = int(temp->off[2]);
 		TreeOctNode::ProcessNodeAdjacentNodesTocomputeB(fData.depth, temp, width, &tree, width, &df);
-		num++;
+		if (temp->indexOfdivergence != -1) { num++; }
 		temp = tree.nextNode(temp);
 	}
 	printf("num of divergence %d\n", num);
@@ -1031,6 +1182,384 @@ void Octree<Degree>::LaplacianProjectionFunction::Function(TreeOctNode* node1,co
 
 
 template<int Degree>
+void Octree<Degree>::MyDivergenceFuntion::Function(TreeOctNode *node1, const TreeOctNode *node2, double *divergence_normal_Value, int *divergence_normal_SampleIndex, int * divergence_normal_EachLength, int *sizeOfDivergence, int column)
+{
+	if (node1->depth() != 5)
+	{
+		printf("MyDivergenceFunction %d\n", node1->depth());
+	}
+
+	int off1[3], off2[3];
+	//off2[0] = index[0];
+	//off2[1] = index[1];
+	//off2[2] = index[2];
+	double divergence = 0;
+	double c1[3], w1[3], c2[3], w2[3];
+
+	for (int i = 0; i < 3; i++)
+	{
+		off1[i] = node1->off[i];
+		off2[i] = node2->off[i];
+		BinaryNode<double>::CenterAndWidth(off1[i], c1[i], w1[i]);
+		BinaryNode<double>::CenterAndWidth(off2[i], c2[i], w2[i]);
+	}
+
+	//if (FunctionData<Degree, Real>::SymmetricIndex(index[0], int(node1->off[0]), scratch[0])) { n.coords[0] = -n.coords[0]; }
+	//if (FunctionData<Degree, Real>::SymmetricIndex(index[1], int(node1->off[1]), scratch[1])) { n.coords[1] = -n.coords[1]; }
+	//if (FunctionData<Degree, Real>::SymmetricIndex(index[2], int(node1->off[2]), scratch[2])) { n.coords[2] = -n.coords[2]; }
+
+	//计算散度
+	PPolynomial<Degree> basefunction = ot->fData.baseFunction;
+	PPolynomial<Degree> base1 = basefunction.scale(w2[0]).shift(c2[0]);
+	//printf("%f %f %f\n", base(c2), base(c1),basefunction((c1-c2)/w2));
+	PPolynomial<Degree - 1> dbasefunction1 = base1.derivative();
+
+	PPolynomial<Degree - 1> dbase = basefunction.derivative();
+
+
+
+	PPolynomial<Degree> base2 = basefunction.scale(w2[1]).shift(c2[1]);
+	//printf("%f %f %f\n", base(c2), base(c1),basefunction((c1-c2)/w2));
+	PPolynomial<Degree - 1> dbasefunction2 = base2.derivative();
+
+
+
+
+	PPolynomial<Degree> base3 = basefunction.scale(w2[2]).shift(c2[2]);
+	//printf("%f %f %f\n", base(c2), base(c1),basefunction((c1-c2)/w2));
+	PPolynomial<Degree - 1> dbasefunction3 = base3.derivative();
+	//divergence = dbasefunction1(c1[0])*base2(c1[1])*base3(c1[2])*n.coords[0] + base1(c1[0])*dbasefunction2(c1[1])*base3(c1[2])*n.coords[1] + base1(c1[0])*base2(c1[1])*dbasefunction3(c1[2])*n.coords[2];
+	double Fx = dbasefunction1(c1[0])*base2(c1[1])*base3(c1[2]);
+	double Fy = base1(c1[0])*dbasefunction2(c1[1])*base3(c1[2]);
+	double Fz = base1(c1[0])*base2(c1[1])*dbasefunction3(c1[2]);
+	//Fx Fy Fz为node function在x y z 方向上的导数 Fx=F1x'F1yF1z F=F1xF1yF1z
+	if (Fx||Fy||Fz)
+	{
+		if (node1->indexOfdivergence == -1)
+		{
+			node1->indexOfdivergence = *sizeOfDivergence;
+			++ *sizeOfDivergence;
+			//printf("%d %d\n", node1->nodeData.mcIndex, node1->indexOfdivergence);
+		}
+		int indexOfdivergence = node1->indexOfdivergence;
+		//int nodeIndex = node2->nodeData.nodeIndex;
+		*(divergence_normal_Value + indexOfdivergence*column + *(divergence_normal_EachLength + indexOfdivergence)) = Fx;
+		*(divergence_normal_SampleIndex + indexOfdivergence*column + *(divergence_normal_EachLength + indexOfdivergence)) = nodeIndex * 3;
+		++*(divergence_normal_EachLength + indexOfdivergence);
+		*(divergence_normal_Value + indexOfdivergence*column + *(divergence_normal_EachLength + indexOfdivergence)) = Fy;
+		*(divergence_normal_SampleIndex + indexOfdivergence*column + *(divergence_normal_EachLength + indexOfdivergence)) = nodeIndex * 3 + 1;
+		++*(divergence_normal_EachLength + indexOfdivergence);
+		*(divergence_normal_Value + indexOfdivergence*column + *(divergence_normal_EachLength + indexOfdivergence)) = Fz;
+		*(divergence_normal_SampleIndex + indexOfdivergence*column + *(divergence_normal_EachLength + indexOfdivergence)) = nodeIndex * 3 + 2;
+		++*(divergence_normal_EachLength + indexOfdivergence);
+	}
+	
+	
+}
+
+
+template<int Degree>
+void Octree<Degree>::GreenFunction::Function(TreeOctNode *node1, const TreeOctNode *node2, double *divergence_normal_Value, int *divergence_normal_SampleIndex, int * divergence_normal_EachLength, double *coefficient, int *coefficient_SampleIndex, int * coefficient_EachLength,int *sizeOfcoefficient, int column)
+{
+	if (node1->depth() != 5)
+	{
+		printf("GreenFunction %d\n", node1->depth());
+	}
+	
+	//node2为node1的邻居 更新node1
+	if (node1->indexOfcoefficient == -1)
+	{
+		node1->indexOfcoefficient = *sizeOfcoefficient;
+		++*(sizeOfcoefficient);
+	}
+	Point3D<Real> &center1 = Point3D<Real>{ 0,0,0 };
+	Real width1=0;
+	node1->centerAndWidth(center1, width1);
+//	printf(" centerAndWidth %f %f %f %f\n", center1.coords[0], center1.coords[1], center1.coords[2], width1);
+	double f = 0, fxx = 0, fxy = 0, fxz = 0, fyy = 0, fyz = 0, fzz = 0;
+	int nodeIndex1 = node1->nodeData.nodeIndex;
+	int nodeIndex2 = node2->nodeData.nodeIndex;
+
+	
+
+	if (nodeIndex1 == nodeIndex2)
+	{
+		//	printf("11\n");
+		Point3D<Real> &start = Point3D<Real>{0,0,0};
+
+		start.coords[0] = center2[0] - width2 / 2;
+		start.coords[1] = center2[1] - width2 / 2;
+		start.coords[2] = center2[2] - width2 / 2;
+		//cout << start[0] << " " << start[1] << " " << start[2] << endl;
+		//将立方体中的格林函数分为球体和剩余部分 两部分来计算
+		double radius = width1 / 4;
+
+		double f_radius = 2 * PI*radius*radius;
+		double f_residue = 0;
+		double fxx_residue = 0, fxy_residue = 0, fxz_residue = 0, fyy_residue = 0, fyz_residue = 0, fzz_residue = 0;//Sd is second derivative
+																													//产生随机数
+		int unitNumInResidue = 200;
+		srand((int)time(0));
+		for (int m = 0; m < unitNumInResidue; m++)
+		{
+			int gaoya = 0;
+			//cout << m << endl;
+			double x_residue, y_residue, z_residue = 0;
+			x_residue = (rand() / (double)RAND_MAX)*(width2)+start.coords[0];
+			y_residue = (rand() / (double)RAND_MAX)*(width2)+start.coords[1];
+			z_residue = (rand() / (double)RAND_MAX)*(width2)+start.coords[2];
+			double dist = sqrt((x_residue - center2[0])*(x_residue - center2[0]) + (y_residue - center2[1])*(y_residue - center2[1]) + (z_residue - center2[2])*(z_residue - center2[2]));
+			//保证随机产生的点在residue中
+			while (dist < radius)
+			{
+				gaoya++;
+				x_residue = (rand() / (double)RAND_MAX)*(width2)+start.coords[0];
+				y_residue = (rand() / (double)RAND_MAX)*(width2)+start.coords[1];
+				z_residue = (rand() / (double)RAND_MAX)*(width2)+start.coords[2];
+
+				dist = sqrt((x_residue - center2[0])*(x_residue - center2[0]) + (y_residue - center2[1])*(y_residue - center2[1]) + (z_residue - center2[2])*(z_residue - center2[2]));
+				//cout <<"dist"<< dist << endl;
+			}
+			//cout << x_residue << " " << y_residue << " "<<z_residue << " "<<dist<<" "<<radius<<" "<<nodeIndexInSpare<<" "<<_nodeIndexInSpare<<" "<<gaoya<<endl;
+			//compute the differential of Green
+			/*(3 * (2 * x - 2 * x1) ^ 2) / (4 * ((x - x1) ^ 2 + (y - y1) ^ 2 + (z - z1) ^ 2) ^ (5 / 2)) - 1 / ((x - x1) ^ 2 + (y - y1) ^ 2 + (z - z1) ^ 2) ^ (3 / 2)
+			(3 * (2 * x - 2 * x1)*(2 * y - 2 * y1)) / (4 * ((x - x1) ^ 2 + (y - y1) ^ 2 + (z - z1) ^ 2) ^ (5 / 2))
+			(3 * (2 * x - 2 * x1)*(2 * z - 2 * z1)) / (4 * ((x - x1) ^ 2 + (y - y1) ^ 2 + (z - z1) ^ 2) ^ (5 / 2))
+			(3 * (2 * y - 2 * y1) ^ 2) / (4 * ((x - x1) ^ 2 + (y - y1) ^ 2 + (z - z1) ^ 2) ^ (5 / 2)) - 1 / ((x - x1) ^ 2 + (y - y1) ^ 2 + (z - z1) ^ 2) ^ (3 / 2)
+			(3 * (2 * y - 2 * y1)*(2 * z - 2 * z1)) / (4 * ((x - x1) ^ 2 + (y - y1) ^ 2 + (z - z1) ^ 2) ^ (5 / 2))
+			(3 * (2 * z - 2 * z1) ^ 2) / (4 * ((x - x1) ^ 2 + (y - y1) ^ 2 + (z - z1) ^ 2) ^ (5 / 2)) - 1 / ((x - x1) ^ 2 + (y - y1) ^ 2 + (z - z1) ^ 2) ^ (3 / 2)*/
+
+			//x,y,z are from centerOfNode and x1,y1,z1 are from centerOf_Node
+			double x = center1.coords[0], y = center1.coords[1], z = center1.coords[2], x1 = x_residue, y1 = y_residue, z1 = z_residue;
+			double F = (x - x1)*(x - x1) + (y - y1)*(y - y1) + (z - z1)*(z - z1);
+			fxx_residue += (3 * pow((2 * x - 2 * x1), 2)) / (4 * pow(F, 2.5)) - 1 / (pow(F, 1.5));
+			fxy_residue += (3 * (2 * x - 2 * x1)*(2 * y - 2 * y1)) / (4 * pow(F, 2.5));
+			fxz_residue += (3 * (2 * x - 2 * x1)*(2 * z - 2 * z1)) / (4 * pow(F, 2.5));
+			fyy_residue += (3 * pow((2 * y - 2 * y1), 2)) / (4 * pow(F, 2.5)) - 1 / (pow(F, 1.5));
+			fyz_residue += (3 * (2 * y - 2 * y1)*(2 * z - 2 * z1)) / (4 * pow(F, 2.5));
+			fzz_residue += (3 * pow((2 * z - 2 * z1), 2)) / (4 * pow(F, 2.5)) - 1 / (pow(F, 1.5));
+			//double diffOfGreen = fxx*fxx + fxy*fxy + fxz*fxz + fyy*fyy + fyz*fyz + fzz*fzz;
+
+			//printf("x %f y %f z %f x1 %f y1 %f z1 %f\n", x, y, z, x1, y1, z1);
+			//printf("F %f fxx %f fxy %f fxz %f fyy %f fyz %f fzz  %f\n", F,fxx,fxy,fxz,fyy,fyz,fzz);
+			f_residue += 1 / (4 * PI*sqrt(F));
+			//cout << m <<" "<<gaoya<< endl;
+		}
+		f_residue /= unitNumInResidue;
+		fxx_residue /= unitNumInResidue;
+		fxy_residue /= unitNumInResidue;
+		fxz_residue /= unitNumInResidue;
+		fyy_residue /= unitNumInResidue;
+		fyz_residue /= unitNumInResidue;
+		fzz_residue /= unitNumInResidue;
+		f = (f_radius + (width2*width2*width2 - (4 / 3)*PI*radius*radius*radius)*f_residue) / (width2*width2*width2);
+		fxx = ((width2*width2*width2 - (4 / 3)*PI*radius*radius*radius)*fxx_residue) / (width2*width2*width2);
+		fxy = ((width2*width2*width2 - (4 / 3)*PI*radius*radius*radius)*fxy_residue) / (width2*width2*width2);
+		fxz = ((width2*width2*width2 - (4 / 3)*PI*radius*radius*radius)*fxz_residue) / (width2*width2*width2);
+		fyy = ((width2*width2*width2 - (4 / 3)*PI*radius*radius*radius)*fyy_residue) / (width2*width2*width2);
+		fyz = ((width2*width2*width2 - (4 / 3)*PI*radius*radius*radius)*fyz_residue) / (width2*width2*width2);
+		fzz = ((width2*width2*width2 - (4 / 3)*PI*radius*radius*radius)*fzz_residue) / (width2*width2*width2);
+	}
+	else
+	{
+		//printf("11\n");
+		Point3D<Real> &start = Point3D<Real>{0,0,0};
+		start.coords[0] = center2[0] - width2 / 2;
+		start.coords[1] = center2[1] - width2 / 2;
+		start.coords[2] = center2[2] - width2 / 2;
+		//cout << "2" << endl;
+		//cout << start[0] << " " << start[1] << " " << start[2] << endl;
+		double f_residue = 0;
+		double fxx_residue = 0, fxy_residue = 0, fxz_residue = 0, fyy_residue = 0, fyz_residue = 0, fzz_residue = 0;//Sd is second derivative
+
+		int unitNumInResidue = 200;
+		srand((int)time(0));
+		for (int m = 0; m < unitNumInResidue; m++)
+		{
+			double x_residue, y_residue, z_residue = 0;
+			x_residue = (rand() / (double)RAND_MAX)*(width2)+start.coords[0];
+			y_residue = (rand() / (double)RAND_MAX)*(width2)+start.coords[1];
+			z_residue = (rand() / (double)RAND_MAX)*(width2)+start.coords[2];
+			//cout << x_residue << " " << y_residue << " " << z_residue << " " << nodeIndexInSpare << " " << _nodeIndexInSpare << endl;
+
+			double x = center1.coords[0], y = center1.coords[1], z = center1.coords[2], x1 = x_residue, y1 = y_residue, z1 = z_residue;
+			double F = (x - x1)*(x - x1) + (y - y1)*(y - y1) + (z - z1)*(z - z1);
+			fxx_residue += (3 * pow((2 * x - 2 * x1), 2)) / (4 * pow(F, 2.5)) - 1 / (pow(F, 1.5));
+			fxy_residue += (3 * (2 * x - 2 * x1)*(2 * y - 2 * y1)) / (4 * pow(F, 2.5));
+			fxz_residue += (3 * (2 * x - 2 * x1)*(2 * z - 2 * z1)) / (4 * pow(F, 2.5));
+			fyy_residue += (3 * pow((2 * y - 2 * y1), 2)) / (4 * pow(F, 2.5)) - 1 / (pow(F, 1.5));
+			fyz_residue += (3 * (2 * y - 2 * y1)*(2 * z - 2 * z1)) / (4 * pow(F, 2.5));
+			fzz_residue += (3 * pow((2 * z - 2 * z1), 2)) / (4 * pow(F, 2.5)) - 1 / (pow(F, 1.5));
+			//double diffOfGreen = fxx*fxx + fxy*fxy + fxz*fxz + fyy*fyy + fyz*fyz + fzz*fzz;
+
+			//printf("x %f y %f z %f x1 %f y1 %f z1 %f\n", x, y, z, x1, y1, z1);
+			//printf("F %f fxx %f fxy %f fxz %f fyy %f fyz %f fzz  %f\n", F,fxx,fxy,fxz,fyy,fyz,fzz);
+			f_residue += 1 / (4 * PI*sqrt(F));
+		}
+		f_residue /= unitNumInResidue;
+		fxx_residue /= unitNumInResidue;
+		fxy_residue /= unitNumInResidue;
+		fxz_residue /= unitNumInResidue;
+		fyy_residue /= unitNumInResidue;
+		fyz_residue /= unitNumInResidue;
+		fzz_residue /= unitNumInResidue;
+		f = f_residue;
+		fxx = fxx_residue;
+		fxy = fxy_residue;
+		fxz = fxz_residue;
+		fyy = fyy_residue;
+		fyz = fyz_residue;
+		fzz = fzz_residue;
+		//cout << "2" << endl;
+	}
+
+	int lamda = 1000;
+	double LSValue[7] = { f,fxx / lamda,fxy / lamda,fxz / lamda,fyy / lamda,fyz / lamda,fzz / lamda };
+	double F = (center1.coords[0] - center2[0])*(center1.coords[0] - center2[0]) + (center1.coords[1] - center2[1])*(center1.coords[1] - center2[1]) + (center1.coords[2] - center2[2])*(center1.coords[2] - center2[2]);
+	double Fxx = (3 * pow((2 * center1.coords[0] - 2 * center2[0]), 2)) / (4 * pow(F, 2.5)) - 1 / (pow(F, 1.5));
+	int _nodeIndexInSpare = node2->indexOfdivergence;
+	int nodeIndexInSpare = node1->indexOfcoefficient;
+	//printf("center1 %f %f %f center2 %f %f %f nodeindex1 %d nodeindex2 %d\n", center1.coords[0], center1.coords[1], center1.coords[2], center2[0], center2[1], center2[2], node1->nodeData.nodeIndex, node2->nodeData.nodeIndex);
+	//printf("%f %f %f %f %f %f %f %f %f %d %d %d\n", 1 / (4 * PI*sqrt(F)), f, Fxx / lamda, fxx / lamda, fxy / lamda, fxz / lamda, fyy / lamda, fyz / lamda, fzz / lamda, nodeIndexInSpare, node1->indexOfdivergence,_nodeIndexInSpare);
+
+
+
+	for (int indexLS = 0; indexLS < 7; indexLS++)
+	{
+		//div_green为散度乘以格林函数 相加即为f(x) 
+		double *div_green_Value = NULL;
+		//cout << "size div_green" << *(diverence_normal_EachLength + nodeIndexInSpare) << endl;
+		div_green_Value = (double *)malloc(*(divergence_normal_EachLength + _nodeIndexInSpare) * sizeof(double));
+		if (NULL == div_green_Value)
+		{
+			printf("div_green malloc failed\n");
+		}
+		memset(div_green_Value, 0, *(divergence_normal_EachLength + _nodeIndexInSpare) * sizeof(double));
+		int *div_green_SampleIndex = NULL;
+		div_green_SampleIndex = (int *)malloc(*(divergence_normal_EachLength + _nodeIndexInSpare) * sizeof(int));
+		if (NULL == div_green_SampleIndex)
+		{
+			printf("div_green_SampleIndex malloc failed\n");
+		}
+		memset(div_green_SampleIndex, 0, *(divergence_normal_EachLength + _nodeIndexInSpare) * sizeof(int));
+		int div_green_Length = 0;
+		//div_green_Length = (int *)malloc(7 * sizeof(int));
+		//memset(div_green_Length, 0, 7 * sizeof(int));
+		//cout << 1 / sqrt(Green) << " " << diffOfGreen  << endl;
+		//for (int m = 0; m < *(diverence_normal_EachLength + _nodeIndexInSpare); m++)
+
+		while (div_green_Length<*(divergence_normal_EachLength + _nodeIndexInSpare))
+		{
+			//cout << *(diverence_normal_Value + _nodeIndexInSpare*size_col*3 + div_green_Length) << endl;
+			*(div_green_Value + div_green_Length) = *(divergence_normal_Value + _nodeIndexInSpare*column + div_green_Length)*(LSValue[indexLS])*width2*width2*width2;
+			//cout << *(diverence_normal_Value + nodeIndexInSpare*size_col*3 + div_green_Length) <<" "<<(1 / sqrt(Green) + diffOfGreen / 1000000)<< " "<< *(div_green_Value + div_green_Length) <<endl;
+			*(div_green_SampleIndex + div_green_Length) = *(divergence_normal_SampleIndex + _nodeIndexInSpare*column + div_green_Length);
+			++div_green_Length;
+		}
+		if (div_green_Length != *(divergence_normal_EachLength + _nodeIndexInSpare))
+		{
+			printf("div_green_Length!=*(diverence_normal_EachLength+_nodeIndexInSpare)\n") ;
+		}
+		//cout << "1" << endl;
+		//cout << *(coefficient_EachLength + nodeIndexInSpare) << endl;
+		//cout << "shadow" << *(coefficient_EachLength + i) << " "<<div_green_Length<<" " << *(coefficient_EachLength + i) + div_green_Length << endl;
+		double *shadowCoeValue = NULL;
+		shadowCoeValue = (double *)malloc((*(coefficient_EachLength + nodeIndexInSpare * 7 + indexLS) + div_green_Length) * sizeof(double));
+		if (shadowCoeValue == NULL)
+		{
+			printf("shadowCoeValue malloc failed\n");
+		}
+		memset(shadowCoeValue, 0, (*(coefficient_EachLength + nodeIndexInSpare * 7 + indexLS) + div_green_Length) * sizeof(double));
+
+		int *shadowCoeSampleIndex = NULL;
+		shadowCoeSampleIndex = (int *)malloc((*(coefficient_EachLength + nodeIndexInSpare * 7 + indexLS) + div_green_Length) * sizeof(int));
+		if (shadowCoeSampleIndex == NULL)
+		{
+			printf("shadowCoeSampleIndex malloc failed\n");
+		}
+		memset(shadowCoeSampleIndex, 0, (*(coefficient_EachLength + nodeIndexInSpare * 7 + indexLS) + div_green_Length) * sizeof(int));
+
+		int shadowCoeLength = 0;
+
+
+		int indexCoe = 0;
+		int	indexDivGreen = 0;
+		while (indexCoe < *(coefficient_EachLength + nodeIndexInSpare * 7 + indexLS) && indexDivGreen < div_green_Length)
+		{
+			if (*(coefficient_SampleIndex + (nodeIndexInSpare * 7 + indexLS)*column + indexCoe) == *(div_green_SampleIndex + indexDivGreen))
+			{
+				*(shadowCoeValue + shadowCoeLength) = *(coefficient + (nodeIndexInSpare * 7 + indexLS)*column  + indexCoe) + *(div_green_Value + indexDivGreen);
+				*(shadowCoeSampleIndex + shadowCoeLength) = *(coefficient_SampleIndex + (nodeIndexInSpare * 7 + indexLS)*column + indexCoe);
+				shadowCoeLength++;
+				indexCoe++;
+				indexDivGreen++;
+			}
+			else if (*(coefficient_SampleIndex + (nodeIndexInSpare * 7 + indexLS)*column + indexCoe) < *(div_green_SampleIndex + indexDivGreen))
+			{
+				*(shadowCoeValue + shadowCoeLength) = *(coefficient + (nodeIndexInSpare * 7 + indexLS)*column + indexCoe);
+				*(shadowCoeSampleIndex + shadowCoeLength) = *(coefficient_SampleIndex + (nodeIndexInSpare * 7 + indexLS)*column+ indexCoe);
+				shadowCoeLength++;
+				indexCoe++;
+			}
+			else
+			{
+				*(shadowCoeValue + shadowCoeLength) = *(div_green_Value + indexDivGreen);
+				*(shadowCoeSampleIndex + shadowCoeLength) = *(div_green_SampleIndex + indexDivGreen);
+				shadowCoeLength++;
+				indexDivGreen++;
+			}
+		}
+		//cout << "endwhile" << endl;
+		if (indexCoe < *(coefficient_EachLength + (nodeIndexInSpare * 7 + indexLS)))
+		{
+			for (int m = indexCoe; m < *(coefficient_EachLength + (nodeIndexInSpare * 7 + indexLS)); m++)
+			{
+				*(shadowCoeValue + shadowCoeLength) = *(coefficient + (nodeIndexInSpare * 7 + indexLS)*column + m);
+				*(shadowCoeSampleIndex + shadowCoeLength) = *(coefficient_SampleIndex + (nodeIndexInSpare * 7 + indexLS)*column+ m);
+				shadowCoeLength++;
+			}
+		}
+		if (indexDivGreen < div_green_Length)
+		{
+			for (int m = indexDivGreen; m < div_green_Length; m++)
+			{
+				*(shadowCoeValue + shadowCoeLength) = *(div_green_Value + m);
+				*(shadowCoeSampleIndex + shadowCoeLength) = *(div_green_SampleIndex + m);
+				shadowCoeLength++;
+			}
+		}
+		*(coefficient_EachLength + (nodeIndexInSpare * 7 + indexLS)) = 0;
+		//cout << "shadowCoeLength" << " " << shadowCoeLength << endl;
+		for (int m = 0; m < shadowCoeLength; m++)
+		{
+			*(coefficient + (nodeIndexInSpare * 7 + indexLS)*column + *(coefficient_EachLength + (nodeIndexInSpare * 7 + indexLS))) = *(shadowCoeValue + *(coefficient_EachLength + (nodeIndexInSpare * 7 + indexLS)));
+			*(coefficient_SampleIndex + (nodeIndexInSpare * 7 + indexLS)*column + *(coefficient_EachLength + (nodeIndexInSpare * 7 + indexLS))) = *(shadowCoeSampleIndex + *(coefficient_EachLength + (nodeIndexInSpare * 7 + indexLS)));
+			++ *(coefficient_EachLength + (nodeIndexInSpare * 7 + indexLS));
+		}
+		if (*(coefficient_EachLength + (nodeIndexInSpare * 7 + indexLS)) != shadowCoeLength)
+		{
+			printf("coefficient_EachLength error and i is %d\n", (nodeIndexInSpare * 7 + indexLS));
+		}
+
+
+		free(shadowCoeSampleIndex);
+		shadowCoeSampleIndex = NULL;
+
+		free(shadowCoeValue);
+		shadowCoeValue = NULL;
+
+		free(div_green_SampleIndex);
+		div_green_SampleIndex = NULL;
+
+		free(div_green_Value);
+		div_green_Value = NULL;
+		//cout << "22" << endl;
+	}//indexLS
+}//end
+
+
+
+template<int Degree>
 void Octree<Degree>::DivergenceFunction::computedivergence(TreeOctNode* node1, const TreeOctNode* node2) {
 	//更新node1 node2为基函数
 	int off1[3], off2[3];
@@ -1044,6 +1573,11 @@ void Octree<Degree>::DivergenceFunction::computedivergence(TreeOctNode* node1, c
 		BinaryNode<double>::CenterAndWidth(off1[i], c1[i], w1[i]);
 		BinaryNode<double>::CenterAndWidth(off2[i], c2[i], w2[i]);
 	}
+
+	//if (FunctionData<Degree, Real>::SymmetricIndex(index[0], int(node1->off[0]), scratch[0])) { n.coords[0] = -n.coords[0]; }
+	//if (FunctionData<Degree, Real>::SymmetricIndex(index[1], int(node1->off[1]), scratch[1])) { n.coords[1] = -n.coords[1]; }
+	//if (FunctionData<Degree, Real>::SymmetricIndex(index[2], int(node1->off[2]), scratch[2])) { n.coords[2] = -n.coords[2]; }
+
 	//计算散度
 	PPolynomial<Degree> basefunction = ot->fData.baseFunction;
 	PPolynomial<Degree> base1 = basefunction.scale(w2[0]).shift(c2[0]);
@@ -1066,11 +1600,19 @@ void Octree<Degree>::DivergenceFunction::computedivergence(TreeOctNode* node1, c
 	PPolynomial<Degree - 1> dbasefunction3 = base3.derivative();
 	////printf("off %d %d %d %d %d %d\n", off2[0], off2[1], off2[2], index[0], index[1], index[2]);
 	//printf("off %d %d %d %d %d %d\n", off2[0], off2[1], off2[2], off1[0], off1[1], off1[2]);
-	printf("dbase %f %f %f base %f %f %f c1 %f %f %f %f %f %f \n", dbasefunction1(c1[0]), dbasefunction2(c1[1]), dbasefunction3(c1[2]), base1(c1[0]), base2(c1[1]), base3(c1[2]), dbase((c1[0]-c2[0])/w2[0]), dbase((c1[1] - c2[1]) / w2[1]), dbase((c1[2] - c2[2]) / w2[2]),basefunction((c1[0] - c2[0]) / w2[0]),basefunction((c1[1] - c2[1]) / w2[1]),basefunction((c1[2] - c2[2]) / w2[0]));
 	//printf("%f %f %f\n", n.coords[0], n.coords[1], n.coords[2]);
 	divergence = dbasefunction1(c1[0])*base2(c1[1])*base3(c1[2])*n.coords[0] + base1(c1[0])*dbasefunction2(c1[1])*base3(c1[2])*n.coords[1] + base1(c1[0])*base2(c1[1])*dbasefunction3(c1[2])*n.coords[2];
 	//printf("%f\n", divergence);
+	//printf("divergence %f dbase %f %f %f dbase %f %f %f w %f \n",divergence, dbasefunction1(c1[0]), dbasefunction2(c1[1]), dbasefunction3(c1[2]),  dbase((c1[0]-c2[0])/w2[0]), dbase((c1[1] - c2[1]) / w2[1]), dbase((c1[2] - c2[2]) / w2[2]),w2[0]);
+	//int d = node2->d;
+	//Real width = 0;
+	//Point3D<Real> center;
+	//node2->centerAndWidth(center, width);
+	//printf("%d %d %f %f\n",node2->depth(), d,width,w2[0]);
 	node1->divergence += -divergence;
+	//printf("%f %f %f %f %f %f %f %f %f %f %f %f\n", dbasefunction1(c1[0]), base2(c1[1]), base3(c1[2]), base1(c1[0]), dbasefunction2(c1[1]), base3(c1[2]), base1(c1[0]), base2(c1[1]), dbasefunction3(c1[2]), (c1[0] - c2[0]) / w2[0], (c1[1] - c2[1]) / w2[1], (c1[2] - c2[2]) / w2[2]);
+	//printf("%d %d %d %d\n", node1->depth(), node1->d, node2->depth(), node2->d);
+	//printf("%f %f\n", node1->divergence,divergence);
 }
 
 template<int Degree>
@@ -1090,10 +1632,11 @@ void Octree<Degree>::DivergenceFunction::computeB(TreeOctNode*node1, const TreeO
 		PPolynomial<Degree> base = basefunction.scale(w1).shift(c1);
 		BinaryNode<double>::CenterAndWidth(off2[i], c2, w2);
 		//printf("base %f %f %f %f \n", base(c2), w1,(c2-c1)/w1,basefunction((c2 - c1) / w1));
-		nodevalue *= base(c2)*w1;
+		nodevalue *= base(c2)*w2;
 	}
 	//printf("diverence %f node value %f\n",node2->divergence, nodevalue);
 	node1->b += nodevalue*node2->divergence;
+	//printf("%f \n", nodevalue*node2->divergence);
 }
 
 

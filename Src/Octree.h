@@ -56,13 +56,20 @@ private:
 	static void __ProcessNodeAdjacentNodes(const int& dx,const int& dy,const int& dz,OctNode* node1,const int& radius1,OctNode* node2,const int& radius2,const int& cWidth2,NodeAdjacencyFunction* F);
 	
 	
-	//find diverence
+	//compute diverence
 	template<class NodeAdjacencyFunction>
 	static void __ProcessNodeAdjacentNodesTocomputedivergence(const int& dx, const int& dy, const int& dz, OctNode* node1, const int& radius1, OctNode* node2, const int& radius2, const int& cWidth2, NodeAdjacencyFunction* F);
 	//compute B
 	template<class NodeAdjacencyFunction>
 	static void __ProcessNodeAdjacentNodesTocomputeB(const int& dx, const int& dy, const int& dz, OctNode* node1, const int& radius1, const int& width1, OctNode* node2, const int& radius2, const int& cWidth2, NodeAdjacencyFunction* F);
 
+	//compute Mydivergence
+	template<class NodeAdjacencyFunction>
+	static void __ProcessNodeAdjacentNodesTocomputeMydivergence(const int& dx, const int& dy, const int& dz, OctNode* node1, const int& radius1, OctNode* node2, const int& radius2, const int& cWidth2, NodeAdjacencyFunction* F,int maxDepth, double *divergence_normal_Value, int *divergence_normal_SampleIndex, int * divergence_normal_EachLength, int *sizeOfDivergence,int column);
+
+	//compute MyFunctionByGreen
+	template<class NodeAdjacencyFunction>
+	static void __ProcessNodeAdjacentNodesTocomputeMyFunctionByGreen(const int& dx, const int& dy, const int& dz, OctNode* node1, const int& radius1, const int& width1, OctNode* node2, const int& radius2, const int& cWidth2, NodeAdjacencyFunction* F, int maxDepth,double *divergence_normal_Value, int *divergence_normal_SampleIndex, int * divergence_normal_EachLength, double *coefficient, int *coefficient_SampleIndex, int * coefficient_EachLength,int *sizeOfcoefficient, int column);
 
 	
 	template<class TerminatingNodeAdjacencyFunction>
@@ -94,9 +101,10 @@ public:
 	OctNode* children;
 	short d,off[3];
 	NodeData nodeData;
-	double divergence;
-	double b;
-
+	double divergence=0;
+	double b=0;
+	int indexOfdivergence=-1;
+	int indexOfcoefficient = -1;
 
 	OctNode(void);
 	~OctNode(void);
@@ -156,8 +164,20 @@ public:
 	static void ProcessNodeAdjacentNodesTocomputeB(const int& dx, const int& dy, const int& dz, OctNode* node1, const int& radius1, const int&width1, OctNode* node2, const int& radius2, const int& width2, NodeAdjacencyFunction* F, const int& processCurrent = 1);
 
 
-	
-	
+	//compute divergence coefficient matrices
+	template<class NodeAdjacencyFunction>
+	static void ProcessNodeAdjacentNodesTocomputeMydivergence(const int& maxDepth, OctNode* node1, const int& width1, OctNode* node2, const int& width2, NodeAdjacencyFunction* F, double *divergence_normal_Value, int *divergence_normal_SampleIndex, int * divergence_normal_EachLength, int *sizeOfDivergence,int column, const int& processCurrent = 1);
+	template<class NodeAdjacencyFunction>
+	static void ProcessNodeAdjacentNodesTocomputeMydivergence(const int& dx, const int& dy, const int& dz, OctNode* node1, const int& radius1, OctNode* node2, const int& radius2, const int& width2, NodeAdjacencyFunction* F,int maxDepth, double *divergence_normal_Value, int *divergence_normal_SampleIndex, int * divergence_normal_EachLength, int *sizeOfDivergence,int column, const int& processCurrent = 1);
+
+
+	//compute Myfunction By Green
+	template<class NodeAdjacencyFunction>
+	static void ProcessNodeAdjacentNodesTocomputeMyFunctionByGreen(const int& maxDepth, OctNode* node1, const int& width1, OctNode* node2, const int& width2, NodeAdjacencyFunction* F, double *divergence_normal_Value, int *divergence_normal_SampleIndex, int * divergence_normal_EachLength, double *coefficient, int *coefficient_SampleIndex, int * coefficient_EachLength, int * sizeOfcoefficient, int column, const int& processCurrent = 1);
+	template<class NodeAdjacencyFunction>
+	static void ProcessNodeAdjacentNodesTocomputeMyFunctionByGreen(const int& dx, const int& dy, const int& dz, OctNode* node1, const int& radius1, const int&width1, OctNode* node2, const int& radius2, const int& width2, NodeAdjacencyFunction* F, int maxDepth, double *divergence_normal_Value, int *divergence_normal_SampleIndex, int * divergence_normal_EachLength, double *coefficient, int *coefficient_SampleIndex, int * coefficient_EachLength, int *sizeOfcoefficientint,int column, const int& processCurrent = 1);
+
+
 	
 	template<class TerminatingNodeAdjacencyFunction>
 	static void ProcessTerminatingNodeAdjacentNodes(const int& maxDepth,OctNode* node1,const int& width1,OctNode* node2,const int& width2,TerminatingNodeAdjacencyFunction* F,const int& processCurrent=1);

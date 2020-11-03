@@ -122,4 +122,9 @@
       <Filter>Include Files</Filter>
     </None>
   </ItemGroup>
+  <ItemGroup>
+    <CudaCompile Include="parrel_MC.cu">
+      <Filter>Include Files</Filter>
+    </CudaCompile>
+  </ItemGroup>
 </Project>

@@ -215,6 +215,9 @@ int Execute(int argc,char* argv[])
 	}
 
 
+
+
+
 	t=Time();
 #if 1
 	tree.setTree(In.value,Depth.value,Binary.set,kernelDepth,Real(SamplesPerNode.value),Scale.value,center,scale,!NoResetSamples.set,Confidence.set);
@@ -244,6 +247,15 @@ else{
 	DumpOutput("Finalized 1 In: %lg\n",Time()-t);
 	DumpOutput("Leaves/Nodes: %d/%d\n",tree.tree.leaves(),tree.tree.nodes());
 	DumpOutput("Memory Usage: %.3f MB\n",float(MemoryInfo::Usage())/(1<<20));
+	
+
+
+	t = Time();
+	tree.maxMemoryUsage = 0;
+	tree.GreenMethod();
+	DumpOutput2(comments[commentNum++], "#ComputeDivergence Set In: %9.1f (s), %9.1f (MB)\n", Time() - t, tree.maxMemoryUsage);
+	DumpOutput("Memory Usage: %.3f MB\n", float(MemoryInfo::Usage()) / (1 << 20));
+
 
 	t = Time();
 	tree.maxMemoryUsage = 0;
@@ -258,39 +270,40 @@ else{
 	DumpOutput2(comments[commentNum++], "#ComputeB Set In: %9.1f (s), %9.1f (MB)\n", Time() - t, tree.maxMemoryUsage);
 	DumpOutput("Memory Usage: %.3f MB\n", float(MemoryInfo::Usage()) / (1 << 20));
 
-	t=Time();
-	tree.maxMemoryUsage=0;
-	tree.SetLaplacianWeights();
-	DumpOutput2(comments[commentNum++],"#Laplacian Weights Set In: %9.1f (s), %9.1f (MB)\n",Time()-t,tree.maxMemoryUsage);
-	DumpOutput("Memory Usage: %.3f MB\n",float(MemoryInfo::Usage())/(1<<20));
+	//t=Time();
+	//tree.maxMemoryUsage=0;
+	//tree.SetLaplacianWeights();
+	//DumpOutput2(comments[commentNum++],"#Laplacian Weights Set In: %9.1f (s), %9.1f (MB)\n",Time()-t,tree.maxMemoryUsage);
+	//DumpOutput("Memory Usage: %.3f MB\n",float(MemoryInfo::Usage())/(1<<20));
 
-	t=Time();
-	tree.finalize2(Refine.value);
-	DumpOutput("Finalized 2 In: %lg\n",Time()-t);
-	DumpOutput("Leaves/Nodes: %d/%d\n",tree.tree.leaves(),tree.tree.nodes());
-	DumpOutput("Memory Usage: %.3f MB\n",float(MemoryInfo::Usage())/(1<<20));
+	//t=Time();
+	//tree.finalize2(Refine.value);
+	//DumpOutput("Finalized 2 In: %lg\n",Time()-t);
+	//DumpOutput("Leaves/Nodes: %d/%d\n",tree.tree.leaves(),tree.tree.nodes());
+	//DumpOutput("Memory Usage: %.3f MB\n",float(MemoryInfo::Usage())/(1<<20));
 
-	tree.maxMemoryUsage=0;
-	t=Time();
-	tree.LaplacianMatrixIteration(SolverDivide.value);
-	DumpOutput2(comments[commentNum++],"# Linear System Solved In: %9.1f (s), %9.1f (MB)\n",Time()-t,tree.maxMemoryUsage);
-	DumpOutput("Memory Usage: %.3f MB\n",float(MemoryInfo::Usage())/(1<<20));
+	//tree.maxMemoryUsage=0;
+	//t=Time();
+	//tree.LaplacianMatrixIteration(SolverDivide.value);
+	//DumpOutput2(comments[commentNum++],"# Linear System Solved In: %9.1f (s), %9.1f (MB)\n",Time()-t,tree.maxMemoryUsage);
+	//DumpOutput("Memory Usage: %.3f MB\n",float(MemoryInfo::Usage())/(1<<20));
 
-	CoredVectorMeshData mesh;
-	tree.maxMemoryUsage=0;
-	t=Time();
-	isoValue=tree.GetIsoValue();
-	DumpOutput("Got average in: %f\n",Time()-t);
-	DumpOutput("Iso-Value: %e\n",isoValue);
-	DumpOutput("Memory Usage: %.3f MB\n",float(tree.MemoryUsage()));
+	//CoredVectorMeshData mesh;
+	//tree.maxMemoryUsage=0;
+	//t=Time();
+	//isoValue=tree.GetIsoValue();
+	//DumpOutput("Got average in: %f\n",Time()-t);
+	//DumpOutput("Iso-Value: %e\n",isoValue);
+	//DumpOutput("Memory Usage: %.3f MB\n",float(tree.MemoryUsage()));
 
-	t=Time();
-	if(IsoDivide.value) tree.GetMCIsoTriangles( isoValue , IsoDivide.value , &mesh , 0 , 1 , Manifold.set , PolygonMesh.set );
-	else                tree.GetMCIsoTriangles( isoValue ,                   &mesh , 0 , 1 , Manifold.set , PolygonMesh.set );
-	if( PolygonMesh.set ) DumpOutput2(comments[commentNum++],"#         Got Polygons in: %9.1f (s), %9.1f (MB)\n",Time()-t,tree.maxMemoryUsage);
-	else                  DumpOutput2(comments[commentNum++],"#        Got Triangles in: %9.1f (s), %9.1f (MB)\n",Time()-t,tree.maxMemoryUsage);
-	DumpOutput2(comments[commentNum++],"#              Total Time: %9.1f (s)\n",Time()-tt);
-	PlyWritePolygons(Out.value,&mesh,PLY_BINARY_NATIVE,center,scale,comments,commentNum);
+	//t=Time();
+	//if(IsoDivide.value) tree.GetMCIsoTriangles( isoValue , IsoDivide.value , &mesh , 0 , 1 , Manifold.set , PolygonMesh.set );
+	//else                tree.GetMCIsoTriangles( isoValue ,                   &mesh , 0 , 1 , Manifold.set , PolygonMesh.set );
+	//if( PolygonMesh.set ) DumpOutput2(comments[commentNum++],"#         Got Polygons in: %9.1f (s), %9.1f (MB)\n",Time()-t,tree.maxMemoryUsage);
+	//else                  DumpOutput2(comments[commentNum++],"#        Got Triangles in: %9.1f (s), %9.1f (MB)\n",Time()-t,tree.maxMemoryUsage);
+	//DumpOutput2(comments[commentNum++],"#              Total Time: %9.1f (s)\n",Time()-tt);
+	//PlyWritePolygons(Out.value,&mesh,PLY_BINARY_NATIVE,center,scale,comments,commentNum);
+
 
 	return 1;
 }

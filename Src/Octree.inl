@@ -369,10 +369,160 @@ void OctNode<NodeData,Real>::ProcessNodeAdjacentNodes(const int& dx,const int& d
 }
 
 
+//计算散度系数矩阵
+template<class NodeData, class Real>
+template<class NodeAdjacencyFunction>
+void OctNode<NodeData, Real>::ProcessNodeAdjacentNodesTocomputeMydivergence(const int& maxDepth, OctNode* node1, 
+	                                                                        const int& width1, OctNode* node2, const int& width2, NodeAdjacencyFunction* F,
+	                                                                        double *divergence_normal_Value,int *divergence_normal_SampleIndex,
+	                                                                        int * divergence_normal_EachLength,int *sizeOfDivergence,int column, const int& processCurrent) {
+	int c1[3], c2[3], w1, w2;
+	node1->centerIndex(maxDepth + 1, c1);
+	node2->centerIndex(maxDepth + 1, c2);
+	w1 = node1->width(maxDepth + 1);
+	w2 = node2->width(maxDepth + 1);
+
+	ProcessNodeAdjacentNodesTocomputeMydivergence(c1[0] - c2[0], c1[1] - c2[1], c1[2] - c2[2], node1, (width1*w1) >> 1, node2, (width2*w2) >> 1, w2, F,maxDepth, divergence_normal_Value, divergence_normal_SampleIndex, divergence_normal_EachLength, sizeOfDivergence,column, processCurrent);
+}
+template<class NodeData, class Real>
+template<class NodeAdjacencyFunction>
+void OctNode<NodeData, Real>::ProcessNodeAdjacentNodesTocomputeMydivergence(const int& dx, const int& dy, const int& dz,
+	                                                                        OctNode<NodeData, Real>* node1, const int& radius1,
+	                                                                        OctNode<NodeData, Real>* node2, const int& radius2, const int& width2,
+	                                                                        NodeAdjacencyFunction* F,int maxDepth,
+	                                                                        double *divergence_normal_Value, int *divergence_normal_SampleIndex, 
+	                                                                        int * divergence_normal_EachLength, int *sizeOfDivergence,int column, const int& processCurrent) {
+	if (!Overlap(dx, dy, dz, radius1 + width2 / 2)) { return; }
+	//if (!Overlap(dx, dy, dz, radius1 + radius2)) { return; }
+	//if (processCurrent) { F->Function(node2, node1); }
+	if (!node2->children) { return; }
+	__ProcessNodeAdjacentNodesTocomputeMydivergence(-dx, -dy, -dz, node1, radius1, node2, radius2, width2 / 2, F,maxDepth, divergence_normal_Value, divergence_normal_SampleIndex, divergence_normal_EachLength, sizeOfDivergence, column);
+}
+
+
+template <class NodeData, class Real>
+template<class NodeAdjacencyFunction>
+void OctNode<NodeData, Real>::__ProcessNodeAdjacentNodesTocomputeMydivergence(const int& dx, const int& dy, const int& dz,
+	                                                                          OctNode* node1, const int& radius1,
+	                                                                          OctNode* node2, const int& radius2, const int& cWidth2,
+	                                                                          NodeAdjacencyFunction* F,int maxDepth,
+	                                                                          double *divergence_normal_Value, int *divergence_normal_SampleIndex, 
+	                                                                          int * divergence_normal_EachLength, int *sizeOfDivergence,int column)
+{
+	int cWidth = cWidth2 >> 1;
+	int radius = radius2 >> 1;
+	int o = ChildOverlap(dx, dy, dz, radius1 + cWidth, cWidth);
+	//int o = ChildOverlap(dx, dy, dz, radius1 + radius, cWidth);
+	if (o) {
+		int dx1 = dx - cWidth;
+		int dx2 = dx + cWidth;
+		int dy1 = dy - cWidth;
+		int dy2 = dy + cWidth;
+		int dz1 = dz - cWidth;
+		int dz2 = dz + cWidth;
+		if (o & 1) { if (!node2->children[0].children&&(node2->children[0].depth()==maxDepth)) { F->Function(&node2->children[0], node1, divergence_normal_Value, divergence_normal_SampleIndex, divergence_normal_EachLength, sizeOfDivergence,column); }if (node2->children[0].children) { __ProcessNodeAdjacentNodesTocomputeMydivergence(dx1, dy1, dz1, node1, radius1, &node2->children[0], radius, cWidth, F, maxDepth, divergence_normal_Value, divergence_normal_SampleIndex, divergence_normal_EachLength, sizeOfDivergence, column); } }
+		if (o & 2) { if (!node2->children[1].children && (node2->children[1].depth() == maxDepth)) { F->Function(&node2->children[1], node1, divergence_normal_Value, divergence_normal_SampleIndex, divergence_normal_EachLength, sizeOfDivergence, column); }if (node2->children[1].children) { __ProcessNodeAdjacentNodesTocomputeMydivergence(dx2, dy1, dz1, node1, radius1, &node2->children[1], radius, cWidth, F, maxDepth, divergence_normal_Value, divergence_normal_SampleIndex, divergence_normal_EachLength, sizeOfDivergence, column); } }
+		if (o & 4) { if (!node2->children[2].children && (node2->children[2].depth() == maxDepth)) { F->Function(&node2->children[2], node1, divergence_normal_Value, divergence_normal_SampleIndex, divergence_normal_EachLength, sizeOfDivergence, column); } if (node2->children[2].children) { __ProcessNodeAdjacentNodesTocomputeMydivergence(dx1, dy2, dz1, node1, radius1, &node2->children[2], radius, cWidth, F, maxDepth, divergence_normal_Value, divergence_normal_SampleIndex, divergence_normal_EachLength, sizeOfDivergence, column); } }
+		if (o & 8) { if (!node2->children[3].children && (node2->children[3].depth() == maxDepth)) { F->Function(&node2->children[3], node1, divergence_normal_Value, divergence_normal_SampleIndex, divergence_normal_EachLength, sizeOfDivergence, column); } if (node2->children[3].children) { __ProcessNodeAdjacentNodesTocomputeMydivergence(dx2, dy2, dz1, node1, radius1, &node2->children[3], radius, cWidth, F, maxDepth, divergence_normal_Value, divergence_normal_SampleIndex, divergence_normal_EachLength, sizeOfDivergence, column); } }
+		if (o & 16) { if (!node2->children[4].children && (node2->children[4].depth() == maxDepth)) { F->Function(&node2->children[4], node1, divergence_normal_Value, divergence_normal_SampleIndex, divergence_normal_EachLength, sizeOfDivergence, column); }if (node2->children[4].children) { __ProcessNodeAdjacentNodesTocomputeMydivergence(dx1, dy1, dz2, node1, radius1, &node2->children[4], radius, cWidth, F, maxDepth, divergence_normal_Value, divergence_normal_SampleIndex, divergence_normal_EachLength, sizeOfDivergence, column); } }
+		if (o & 32) { if (!node2->children[5].children && (node2->children[5].depth() == maxDepth)) { F->Function(&node2->children[5], node1, divergence_normal_Value, divergence_normal_SampleIndex, divergence_normal_EachLength, sizeOfDivergence, column); } if (node2->children[5].children) { __ProcessNodeAdjacentNodesTocomputeMydivergence(dx2, dy1, dz2, node1, radius1, &node2->children[5], radius, cWidth, F, maxDepth, divergence_normal_Value, divergence_normal_SampleIndex, divergence_normal_EachLength, sizeOfDivergence, column); } }
+		if (o & 64) { if (!node2->children[6].children && (node2->children[6].depth() == maxDepth)) { F->Function(&node2->children[6], node1, divergence_normal_Value, divergence_normal_SampleIndex, divergence_normal_EachLength, sizeOfDivergence, column); } if (node2->children[6].children) { __ProcessNodeAdjacentNodesTocomputeMydivergence(dx1, dy2, dz2, node1, radius1, &node2->children[6], radius, cWidth, F, maxDepth, divergence_normal_Value, divergence_normal_SampleIndex, divergence_normal_EachLength, sizeOfDivergence, column); } }
+		if (o & 128) { if (!node2->children[7].children && (node2->children[7].depth() == maxDepth)) { F->Function(&node2->children[7], node1, divergence_normal_Value, divergence_normal_SampleIndex, divergence_normal_EachLength, sizeOfDivergence, column); } if (node2->children[7].children) { __ProcessNodeAdjacentNodesTocomputeMydivergence(dx2, dy2, dz2, node1, radius1, &node2->children[7], radius, cWidth, F,maxDepth, divergence_normal_Value, divergence_normal_SampleIndex, divergence_normal_EachLength, sizeOfDivergence, column); } }
 
 
 
-//寻找散度
+		//if (o & 1) { if (!node2->children[0].children) { printf("0 %d %d\n", node2->children[0].depth(), node1->depth()); F->computedivergence(&node2->children[0], node1); }if (node2->children[0].children) { __ProcessNodeAdjacentNodesTocomputedivergence(dx1, dy1, dz1, node1, radius1, &node2->children[0], radius, cWidth, F); } }
+		//if (o & 2) { if (!node2->children[1].children) { printf("1 %d %d\n", node2->children[1].depth(), node1->depth()); F->computedivergence(&node2->children[1], node1); }if (node2->children[1].children) { __ProcessNodeAdjacentNodesTocomputedivergence(dx2, dy1, dz1, node1, radius1, &node2->children[1], radius, cWidth, F); } }
+		//if (o & 4) { if (!node2->children[2].children) { printf("2 %d %d\n", node2->children[2].depth(), node1->depth()); F->computedivergence(&node2->children[2], node1); } if (node2->children[2].children) { __ProcessNodeAdjacentNodesTocomputedivergence(dx1, dy2, dz1, node1, radius1, &node2->children[2], radius, cWidth, F); } }
+		//if (o & 8) { if (!node2->children[3].children) { printf("3 %d %d\n", node2->children[3].depth(), node1->depth()); F->computedivergence(&node2->children[3], node1); } if (node2->children[3].children) { __ProcessNodeAdjacentNodesTocomputedivergence(dx2, dy2, dz1, node1, radius1, &node2->children[3], radius, cWidth, F); } }
+		//if (o & 16) { if (!node2->children[4].children) { printf("4 %d %d\n", node2->children[4].depth(), node1->depth()); F->computedivergence(&node2->children[4], node1); }if (node2->children[4].children) { __ProcessNodeAdjacentNodesTocomputedivergence(dx1, dy1, dz2, node1, radius1, &node2->children[4], radius, cWidth, F); } }
+		//if (o & 32) { if (!node2->children[5].children) { printf("5 %d %d\n", node2->children[5].depth(), node1->depth()); F->computedivergence(&node2->children[5], node1); } if (node2->children[5].children) { __ProcessNodeAdjacentNodesTocomputedivergence(dx2, dy1, dz2, node1, radius1, &node2->children[5], radius, cWidth, F); } }
+		//if (o & 64) { if (!node2->children[6].children) { printf("6 %d %d\n", node2->children[6].depth(), node1->depth()); F->computedivergence(&node2->children[6], node1); } if (node2->children[6].children) { __ProcessNodeAdjacentNodesTocomputedivergence(dx1, dy2, dz2, node1, radius1, &node2->children[6], radius, cWidth, F); } }
+		//if (o & 128) { if (!node2->children[7].children) { printf("7 %d %d\n", node2->children[7].depth(), node1->depth()); F->computedivergence(&node2->children[7], node1); } if (node2->children[7].children) { __ProcessNodeAdjacentNodesTocomputedivergence(dx2, dy2, dz2, node1, radius1, &node2->children[7], radius, cWidth, F); } }
+
+	}
+}
+
+
+//计算f(x) （f(x)通过和格林函数相关的显式积分公式获得）
+
+template<class NodeData, class Real>
+template<class NodeAdjacencyFunction>
+void OctNode<NodeData, Real>::ProcessNodeAdjacentNodesTocomputeMyFunctionByGreen(const int& maxDepth, OctNode* node1, const int& width1, OctNode* node2, const int& width2, NodeAdjacencyFunction* F, 
+	                                                                             double *divergence_normal_Value, int *divergence_normal_SampleIndex, int * divergence_normal_EachLength,
+	                                                                             double *coefficient, int *coefficient_SampleIndex, int * coefficient_EachLength, 
+	                                                                             int *sizeOfcoefficient,int column, const int& processCurrent) {
+	int c1[3], c2[3], w1, w2;
+	node1->centerIndex(maxDepth + 1, c1);
+	node2->centerIndex(maxDepth + 1, c2);
+	w1 = node1->width(maxDepth + 1);
+	w2 = node2->width(maxDepth + 1);
+
+	ProcessNodeAdjacentNodesTocomputeMyFunctionByGreen(c1[0] - c2[0], c1[1] - c2[1], c1[2] - c2[2], node1, (width1*w1) >> 1, w1, node2, (width2*w2) >> 1, w2, F,maxDepth, divergence_normal_Value, divergence_normal_SampleIndex, divergence_normal_EachLength, coefficient, coefficient_SampleIndex, coefficient_EachLength, sizeOfcoefficient,column, processCurrent);
+}
+template<class NodeData, class Real>
+template<class NodeAdjacencyFunction>
+void OctNode<NodeData, Real>::ProcessNodeAdjacentNodesTocomputeMyFunctionByGreen(const int& dx, const int& dy, const int& dz,
+	                                                                             OctNode<NodeData, Real>* node1, const int& radius1, const int&width1,
+	                                                                             OctNode<NodeData, Real>* node2, const int& radius2, const int& width2,
+	                                                                             NodeAdjacencyFunction* F, int maxDepth,
+	                                                                             double *divergence_normal_Value, int *divergence_normal_SampleIndex, int * divergence_normal_EachLength,
+	                                                                             double *coefficient, int *coefficient_SampleIndex, int * coefficient_EachLength, 
+	                                                                             int *sizeOfcoefficient,int column, const int& processCurrent) {
+	if (!Overlap(dx, dy, dz, width1 / 2 + radius2)) { return; }
+	//if (processCurrent) { F->Function(node2, node1); }
+	if (!node2->children) { return; }
+	__ProcessNodeAdjacentNodesTocomputeMyFunctionByGreen(-dx, -dy, -dz, node1, radius1, width1, node2, radius2, width2 / 2, F,maxDepth, divergence_normal_Value, divergence_normal_SampleIndex, divergence_normal_EachLength,coefficient, coefficient_SampleIndex, coefficient_EachLength, sizeOfcoefficient, column);
+}
+
+
+
+template <class NodeData, class Real>
+template<class NodeAdjacencyFunction>
+void OctNode<NodeData, Real>::__ProcessNodeAdjacentNodesTocomputeMyFunctionByGreen(const int& dx, const int& dy, const int& dz,
+	                                                                               OctNode* node1, const int& radius1, const int&width1,
+	                                                                               OctNode* node2, const int& radius2, const int& cWidth2,
+	                                                                               NodeAdjacencyFunction* F, int maxDepth,
+	                                                                               double *divergence_normal_Value, int *divergence_normal_SampleIndex, int * divergence_normal_EachLength,
+	                                                                               double *coefficient, int *coefficient_SampleIndex, 
+	                                                                               int * coefficient_EachLength, int *sizeOfcoefficient, int column)
+{
+	int cWidth = cWidth2 >> 1;
+	int radius = radius2 >> 1;
+	int o = ChildOverlap(dx, dy, dz, width1 / 2 + radius, cWidth);
+	if (o) {
+		int dx1 = dx - cWidth;
+		int dx2 = dx + cWidth;
+		int dy1 = dy - cWidth;
+		int dy2 = dy + cWidth;
+		int dz1 = dz - cWidth;
+		int dz2 = dz + cWidth;
+		if (o & 1) { if (!node2->children[0].children && (node2->children[0].depth() == maxDepth)) { F->Function(&node2->children[0], node1, divergence_normal_Value, divergence_normal_SampleIndex, divergence_normal_EachLength, coefficient, coefficient_SampleIndex, coefficient_EachLength, sizeOfcoefficient, column); }if (node2->children[0].children) { __ProcessNodeAdjacentNodesTocomputeMyFunctionByGreen(dx1, dy1, dz1, node1, radius1, width1, &node2->children[0], radius, cWidth, F, maxDepth, divergence_normal_Value, divergence_normal_SampleIndex, divergence_normal_EachLength, coefficient, coefficient_SampleIndex, coefficient_EachLength, sizeOfcoefficient, column); } }
+		if (o & 2) { if (!node2->children[1].children && (node2->children[1].depth() == maxDepth)) { F->Function(&node2->children[1], node1, divergence_normal_Value, divergence_normal_SampleIndex, divergence_normal_EachLength, coefficient, coefficient_SampleIndex, coefficient_EachLength, sizeOfcoefficient, column); }if (node2->children[1].children) { __ProcessNodeAdjacentNodesTocomputeMyFunctionByGreen(dx2, dy1, dz1, node1, radius1, width1, &node2->children[1], radius, cWidth, F, maxDepth, divergence_normal_Value, divergence_normal_SampleIndex, divergence_normal_EachLength, coefficient, coefficient_SampleIndex, coefficient_EachLength, sizeOfcoefficient, column); } }
+		if (o & 4) { if (!node2->children[2].children && (node2->children[2].depth() == maxDepth)) { F->Function(&node2->children[2], node1, divergence_normal_Value, divergence_normal_SampleIndex, divergence_normal_EachLength, coefficient, coefficient_SampleIndex, coefficient_EachLength, sizeOfcoefficient, column); } if (node2->children[2].children) { __ProcessNodeAdjacentNodesTocomputeMyFunctionByGreen(dx1, dy2, dz1, node1, radius1, width1, &node2->children[2], radius, cWidth, F, maxDepth, divergence_normal_Value, divergence_normal_SampleIndex, divergence_normal_EachLength, coefficient, coefficient_SampleIndex, coefficient_EachLength, sizeOfcoefficient, column); } }
+		if (o & 8) { if (!node2->children[3].children && (node2->children[3].depth() == maxDepth)) { F->Function(&node2->children[3], node1, divergence_normal_Value, divergence_normal_SampleIndex, divergence_normal_EachLength, coefficient, coefficient_SampleIndex, coefficient_EachLength, sizeOfcoefficient, column); } if (node2->children[3].children) { __ProcessNodeAdjacentNodesTocomputeMyFunctionByGreen(dx2, dy2, dz1, node1, radius1, width1, &node2->children[3], radius, cWidth, F, maxDepth, divergence_normal_Value, divergence_normal_SampleIndex, divergence_normal_EachLength, coefficient, coefficient_SampleIndex, coefficient_EachLength, sizeOfcoefficient, column); } }
+		if (o & 16) { if (!node2->children[4].children && (node2->children[4].depth() == maxDepth)) { F->Function(&node2->children[4], node1, divergence_normal_Value, divergence_normal_SampleIndex, divergence_normal_EachLength, coefficient, coefficient_SampleIndex, coefficient_EachLength, sizeOfcoefficient, column); }if (node2->children[4].children) { __ProcessNodeAdjacentNodesTocomputeMyFunctionByGreen(dx1, dy1, dz2, node1, radius1, width1, &node2->children[4], radius, cWidth, F, maxDepth, divergence_normal_Value, divergence_normal_SampleIndex, divergence_normal_EachLength, coefficient, coefficient_SampleIndex, coefficient_EachLength, sizeOfcoefficient, column); } }
+		if (o & 32) { if (!node2->children[5].children && (node2->children[5].depth() == maxDepth)) { F->Function(&node2->children[5], node1, divergence_normal_Value, divergence_normal_SampleIndex, divergence_normal_EachLength, coefficient, coefficient_SampleIndex, coefficient_EachLength, sizeOfcoefficient, column); } if (node2->children[5].children) { __ProcessNodeAdjacentNodesTocomputeMyFunctionByGreen(dx2, dy1, dz2, node1, radius1, width1, &node2->children[5], radius, cWidth, F, maxDepth, divergence_normal_Value, divergence_normal_SampleIndex, divergence_normal_EachLength, coefficient, coefficient_SampleIndex, coefficient_EachLength, sizeOfcoefficient, column); } }
+		if (o & 64) { if (!node2->children[6].children && (node2->children[6].depth() == maxDepth)) { F->Function(&node2->children[6], node1, divergence_normal_Value, divergence_normal_SampleIndex, divergence_normal_EachLength, coefficient, coefficient_SampleIndex, coefficient_EachLength, sizeOfcoefficient, column); } if (node2->children[6].children) { __ProcessNodeAdjacentNodesTocomputeMyFunctionByGreen(dx1, dy2, dz2, node1, radius1, width1, &node2->children[6], radius, cWidth, F, maxDepth, divergence_normal_Value, divergence_normal_SampleIndex, divergence_normal_EachLength, coefficient, coefficient_SampleIndex, coefficient_EachLength, sizeOfcoefficient, column); } }
+		if (o & 128) { if (!node2->children[7].children && (node2->children[7].depth() == maxDepth)) { F->Function(&node2->children[7], node1, divergence_normal_Value, divergence_normal_SampleIndex, divergence_normal_EachLength, coefficient, coefficient_SampleIndex, coefficient_EachLength, sizeOfcoefficient, column); } if (node2->children[7].children) { __ProcessNodeAdjacentNodesTocomputeMyFunctionByGreen(dx2, dy2, dz2, node1, radius1, width1, &node2->children[7], radius, cWidth, F, maxDepth, divergence_normal_Value, divergence_normal_SampleIndex, divergence_normal_EachLength, coefficient, coefficient_SampleIndex, coefficient_EachLength, sizeOfcoefficient, column); } }
+
+		//if (o & 1) {  F->computeB(&node2->children[0], node1); if (node2->children[0].children) { __ProcessNodeAdjacentNodesTocomputeB(dx1, dy1, dz1, node1, radius1, &node2->children[0], radius, cWidth, F); } }
+		//if (o & 2) {  F->computeB(&node2->children[1], node1); if (node2->children[1].children) { __ProcessNodeAdjacentNodesTocomputeB(dx2, dy1, dz1, node1, radius1, &node2->children[1], radius, cWidth, F); } }
+		//if (o & 4) {  F->computeB(&node2->children[2], node1);  if (node2->children[2].children) { __ProcessNodeAdjacentNodesTocomputeB(dx1, dy2, dz1, node1, radius1, &node2->children[2], radius, cWidth, F); } }
+		//if (o & 8) { F->computeB(&node2->children[3], node1);  if (node2->children[3].children) { __ProcessNodeAdjacentNodesTocomputeB(dx2, dy2, dz1, node1, radius1, &node2->children[3], radius, cWidth, F); } }
+		//if (o & 16) { F->computeB(&node2->children[4], node1); if (node2->children[4].children) { __ProcessNodeAdjacentNodesTocomputeB(dx1, dy1, dz2, node1, radius1, &node2->children[4], radius, cWidth, F); } }
+		//if (o & 32) { F->computeB(&node2->children[5], node1);  if (node2->children[5].children) { __ProcessNodeAdjacentNodesTocomputeB(dx2, dy1, dz2, node1, radius1, &node2->children[5], radius, cWidth, F); } }
+		//if (o & 64) {  F->computeB(&node2->children[6], node1);  if (node2->children[6].children) { __ProcessNodeAdjacentNodesTocomputeB(dx1, dy2, dz2, node1, radius1, &node2->children[6], radius, cWidth, F); } }
+		//if (o & 128) {  F->computeB(&node2->children[7], node1);  if (node2->children[7].children) { __ProcessNodeAdjacentNodesTocomputeB(dx2, dy2, dz2, node1, radius1, &node2->children[7], radius, cWidth, F); } }
+
+	}
+}
+
+
+
+
+
+//计算散度
 template<class NodeData, class Real>
 template<class NodeAdjacencyFunction>
 void OctNode<NodeData, Real>::ProcessNodeAdjacentNodesTocomputedivergence(const int& maxDepth, OctNode* node1, const int& width1, OctNode* node2, const int& width2, NodeAdjacencyFunction* F, const int& processCurrent) {
@@ -398,7 +548,6 @@ void OctNode<NodeData, Real>::ProcessNodeAdjacentNodesTocomputedivergence(const 
 }
 
 
-
 template <class NodeData, class Real>
 template<class NodeAdjacencyFunction>
 void OctNode<NodeData, Real>::__ProcessNodeAdjacentNodesTocomputedivergence(const int& dx, const int& dy, const int& dz,
@@ -410,6 +559,7 @@ void OctNode<NodeData, Real>::__ProcessNodeAdjacentNodesTocomputedivergence(cons
 	int radius = radius2 >> 1;
 	int o = ChildOverlap(dx, dy, dz, radius1 + cWidth, cWidth);
 	//int o = ChildOverlap(dx, dy, dz, radius1 + radius, cWidth);
+	//int o = ChildOverlap(dx, dy, dz, radius1 , cWidth);
 	if (o) {
 		int dx1 = dx - cWidth;
 		int dx2 = dx + cWidth;
@@ -932,7 +1082,7 @@ inline int OctNode<NodeData,Real>::Overlap2(const int &depth1,const int offSet1[
 }
 template <class NodeData,class Real>
 inline int OctNode<NodeData,Real>::Overlap(const int& c1,const int& c2,const int& c3,const int& dWidth){
-	if(c1>=dWidth || c1<=-dWidth || c2>=dWidth || c2<=-dWidth || c3>=dWidth || c3<=-dWidth){return 0;}
+	if(c1>dWidth || c1<-dWidth || c2>dWidth || c2<-dWidth || c3>dWidth || c3<-dWidth){return 0;}
 	else{return 1;}
 }
 template <class NodeData,class Real>
