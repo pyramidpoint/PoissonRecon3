@@ -43,7 +43,11 @@ public:
 	int edgeIndex;
 	long long key;
 };
-
+struct sortDiv
+{
+	float value = 0;
+	int index = 0;
+};
 class VertexData{
 public:
 	static long long EdgeIndex(const TreeOctNode* node,const int& eIndex,const int& maxDepth,int index[DIMENSION]);
@@ -247,7 +251,7 @@ class Octree{
 	void NonLinearSplatOrientedPoint(const Point3D<Real>& point,const Point3D<Real>& normal,const int& kernelDepth,const Real& samplesPerNode,const int& minDepth,const int& maxDepth);
 
 	int HasNormals(TreeOctNode* node,const Real& epsilon);
-
+	
 	Real getCenterValue(const TreeOctNode* node);
 	Real getCornerValue(const TreeOctNode* node,const int& corner);
 	void getCornerValueAndNormal(const TreeOctNode* node,const int& corner,Real& value,Point3D<Real>& normal);
@@ -255,6 +259,7 @@ public:
 	static double maxMemoryUsage;
 	static double MemoryUsage(void);
 	std::vector< Point3D<Real> >* normals;
+	std::vector< std::vector< ngbrCoe<Real> > > *ngbrs;
 	Real postNormalSmooth;
 	TreeOctNode tree;
 	FunctionData<Degree,FunctionDataReal> fData;
@@ -265,7 +270,7 @@ public:
 	void finalize2(const int& refineNeighbors=-1);
 	int setTree(char* fileName,const int& maxDepth,const int& binary,const int& kernelDepth,const Real& samplesPerNode,
 		const Real& scaleFactor,Point3D<Real>& center,Real& scale,const int& resetSampleDepths,const int& useConfidence);
-
+	void write_ply(float *triangles, int data_length, char *output_file, int *mcIsLeaf);
 	void SetLaplacianWeights(void);
 	void ComputeDivergence(void);
 	void ComputeB(void);

@@ -103,7 +103,7 @@ public:
 	NodeData nodeData;
 	double divergence=0;
 	double b=0;
-	int indexOfdivergence=-1;
+	int indexOfdivergence = -1;
 	int indexOfcoefficient = -1;
 
 	OctNode(void);

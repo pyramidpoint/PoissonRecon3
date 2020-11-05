@@ -257,18 +257,18 @@ else{
 	DumpOutput("Memory Usage: %.3f MB\n", float(MemoryInfo::Usage()) / (1 << 20));
 
 
-	t = Time();
-	tree.maxMemoryUsage = 0;
-	tree.ComputeDivergence();
-	DumpOutput2(comments[commentNum++], "#ComputeDivergence Set In: %9.1f (s), %9.1f (MB)\n", Time() - t, tree.maxMemoryUsage);
-	DumpOutput("Memory Usage: %.3f MB\n", float(MemoryInfo::Usage()) / (1 << 20));
+	//t = Time();
+	//tree.maxMemoryUsage = 0;
+	//tree.ComputeDivergence();
+	//DumpOutput2(comments[commentNum++], "#ComputeDivergence Set In: %9.1f (s), %9.1f (MB)\n", Time() - t, tree.maxMemoryUsage);
+	//DumpOutput("Memory Usage: %.3f MB\n", float(MemoryInfo::Usage()) / (1 << 20));
 
 
-	t = Time();
-	tree.maxMemoryUsage = 0;
-	tree.ComputeB();
-	DumpOutput2(comments[commentNum++], "#ComputeB Set In: %9.1f (s), %9.1f (MB)\n", Time() - t, tree.maxMemoryUsage);
-	DumpOutput("Memory Usage: %.3f MB\n", float(MemoryInfo::Usage()) / (1 << 20));
+	//t = Time();
+	//tree.maxMemoryUsage = 0;
+	//tree.ComputeB();
+	//DumpOutput2(comments[commentNum++], "#ComputeB Set In: %9.1f (s), %9.1f (MB)\n", Time() - t, tree.maxMemoryUsage);
+	//DumpOutput("Memory Usage: %.3f MB\n", float(MemoryInfo::Usage()) / (1 << 20));
 
 	//t=Time();
 	//tree.maxMemoryUsage=0;
@@ -305,7 +305,7 @@ else{
 	//PlyWritePolygons(Out.value,&mesh,PLY_BINARY_NATIVE,center,scale,comments,commentNum);
 
 
-	return 1;
+	//return 1;
 }
 
 int main(int argc,char* argv[])

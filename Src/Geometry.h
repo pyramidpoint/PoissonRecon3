@@ -39,6 +39,10 @@ Real Random(void);
 template<class Real>
 struct Point3D{Real coords[3];};
 
+
+template<class Real>
+struct ngbrCoe { Real value; int index; };
+
 template<class Real>
 Point3D<Real> RandomBallPoint(void);
 

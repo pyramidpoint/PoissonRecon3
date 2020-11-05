@@ -39,7 +39,13 @@ DAMAGE.
 #include "cuda_runtime.h"
 #include "device_launch_parameters.h"
 #include<stdlib.h>
+#include <algorithm>
+#include<iostream>
+using namespace std;
 
+extern "C"
+cudaError_t MC(float * mcCubeValue, int * mcIsLeaf, float *mcCubePosition, int sizeSolution, float *trangles, float Isovalue);
+#define PI 3.141592653
 #define ITERATION_POWER 1.0/3
 #define MEMORY_ALLOCATOR_BLOCK_SIZE 1<<12
 
@@ -147,26 +153,36 @@ int Octree<Degree>::NonLinearSplatOrientedPoint(TreeOctNode* node,const Point3D<
 		dx[i][1]=0.750        -      x*x;
 		dx[i][2]=1.0-dx[i][1]-dx[i][0];
 	}
+	std::vector<ngbrCoe<Real>> ngbr;
 	for(i=0;i<3;i++){
 		for(j=0;j<3;j++){
 			dxdy=dx[0][i]*dx[1][j];
 			for(k=0;k<3;k++){
 				if(neighbors.neighbors[i][j][k]){
 					dxdydz=dxdy*dx[2][k];
+					//nodeIndex是在8*normal大小的normal域中的索引
 					int idx=neighbors.neighbors[i][j][k]->nodeData.nodeIndex;
 					if(idx<0){
 						Point3D<Real> n;
 						n.coords[0]=n.coords[1]=n.coords[2]=0;
 						idx=neighbors.neighbors[i][j][k]->nodeData.nodeIndex=int(normals->size());
+						//printf("normals->size() %d\n", int(normals->size()));
 						normals->push_back(n);
 					}
 					(*normals)[idx].coords[0]+=Real(normal.coords[0]*dxdydz);
 					(*normals)[idx].coords[1]+=Real(normal.coords[1]*dxdydz);
 					(*normals)[idx].coords[2]+=Real(normal.coords[2]*dxdydz);
+					ngbrCoe<Real> Coe;
+					Coe.index =idx ;
+					Coe.value = Real( dxdydz);
+					ngbr.push_back(Coe);
+					
+
 				}
 			}
 		}
 	}
+	ngbrs->push_back(ngbr);
 	return 0;
 }
 template<int Degree>
@@ -419,7 +435,9 @@ int Octree<Degree>::setTree(char* fileName,const int& maxDepth,const int& binary
 
 	DumpOutput("Adding Points and Normals\n");
 	normals=new std::vector<Point3D<Real> >();
-	ngbr
+	ngbrs = new std::vector<std::vector<ngbrCoe<Real>>>();
+	//std::vector<ngbrCoe<Real>> ngbr;
+
 	cnt=0;
 	fseek(fp,SEEK_SET,0);
 	while(1){
@@ -620,7 +638,8 @@ int Octree<Degree>::LaplacianMatrixIteration(const int& subdivideDepth){
 	SparseMatrix<float>::SetAllocator(MEMORY_ALLOCATOR_BLOCK_SIZE);
 
 	sNodes.treeNodes[0]->nodeData.value=0;
-	for(i= sNodes.maxDepth-1;i<sNodes.maxDepth;i++){
+	//for(i= 1;i<sNodes.maxDepth;i++){
+	for (i = sNodes.maxDepth-1; i<sNodes.maxDepth; i++) {
 		DumpOutput("Depth: %d/%d\n",i,sNodes.maxDepth-1);
 		t=Time();
 		if(subdivideDepth>0){iter+=SolveFixedDepthMatrix(i,subdivideDepth,sNodes);}
@@ -920,7 +939,9 @@ int Octree<Degree>::HasNormals(TreeOctNode* node,const Real& epsilon){
 template<int Degree>
 void Octree<Degree>::ClipTree(void){
 	TreeOctNode* temp;
+
 	temp=tree.nextNode();
+
 	while(temp){
 		if(temp->children){
 			int hasNormals=0;
@@ -929,6 +950,7 @@ void Octree<Degree>::ClipTree(void){
 		}
 		temp=tree.nextNode(temp);
 	}
+
 }
 template<int Degree>
 void Octree<Degree>::SetLaplacianWeights(void){
@@ -970,9 +992,28 @@ void Octree<Degree>::SetLaplacianWeights(void){
 template<int Degree>
 void Octree<Degree>::GreenMethod(void)
 {
+	int ngbrs_size = ngbrs->size();
+	int normals_size = normals->size();
+	//int maxindex = 0;
+	//for (int i = 0; i < ngbrs->size(); i++)
+	//{
+	//	std::vector<ngbrCoe<Real>> a=(*ngbrs)[i];
+	//	for (int j = 0; j < a.size(); j++)
+	//	{
+	//		int k = a[j].index;
+	//		if (k > maxindex)
+	//		{
+	//			maxindex = k;
+	//		}
+	//	}
+	//}
+	//printf("ngbrs size %d  normals size %d maxindex %d\n", ngbrs->size(),normals->size(),maxindex);
+
+
+
 	//计算散度
 	int size_sample = (*normals).size();
-	int size_normal = size_sample * 8;
+	int size_normal = size_sample * 4;
 	int size_col = 300;
 	//声明法向量散度的值
 	double *divergence_normal_Value = NULL;
@@ -1010,6 +1051,12 @@ void Octree<Degree>::GreenMethod(void)
 	*sizeOfDivergence = 0;
 	TreeOctNode* temp;
 	MyDivergenceFuntion mf;
+	Eigen::VectorXd Tnormal(normals_size * 3);
+	for (int i = 0; i < normals_size * 3; i++)
+	{
+		Tnormal[i] = 0;
+	}
+
 	temp = tree.nextNode();
 	int num = 0;
 	while (temp)
@@ -1023,14 +1070,54 @@ void Octree<Degree>::GreenMethod(void)
 		mf.index[1] = int(temp->off[1]);
 		mf.index[2] = int(temp->off[2]);
 		mf.nodeIndex = temp->nodeData.nodeIndex;
+		Tnormal[temp->nodeData.nodeIndex * 3] = (*normals)[temp->nodeData.nodeIndex].coords[0];
+		Tnormal[temp->nodeData.nodeIndex * 3 + 1] = (*normals)[temp->nodeData.nodeIndex].coords[1];
+		Tnormal[temp->nodeData.nodeIndex * 3 + 2] = (*normals)[temp->nodeData.nodeIndex].coords[2];
 		TreeOctNode::ProcessNodeAdjacentNodesTocomputeMydivergence(fData.depth, temp, width, &tree, width, &mf,divergence_normal_Value,divergence_normal_SampleIndex,divergence_normal_EachLength,sizeOfDivergence,size_col*3);
 		temp = tree.nextNode(temp);
 		num++;
 	}
-	printf("%d %d\n", *sizeOfDivergence,num);
+	printf("%d %d\n", *sizeOfDivergence,num); 
+	int maxLen = 0;
+	FILE *fp_Div = fopen("Divergence.txt", "w");
+	for (int i = 0; i < *sizeOfDivergence; i++)
+	{
+		if (*(divergence_normal_EachLength + i) > maxLen)
+		{
+			maxLen = *(divergence_normal_EachLength + i);
+		}
+		for (int j = 0; j < *(divergence_normal_EachLength + i); j++)
+		{
+			fprintf(fp_Div, "%f ", *(divergence_normal_Value + i*size_col * 3 + j));
+		}
+		fprintf(fp_Div, "\n");
+	}
+	fclose(fp_Div);
+	printf("maxLen of divergence %d\n", maxLen);
+	//typedef Eigen::Triplet<double> TStoO;
+	////s->o (F(o,s)) s为行数
+	//Eigen::SparseMatrix<double> matStoO(normals_size *3, ngbrs_size *3 );
+	//std::vector<TStoO> coeStoO;
 
-
-
+	//for (int i = 0; i < ngbrs_size; i++)
+	//{
+	//	std::vector<ngbrCoe<Real>> ngbr = (*ngbrs)[i];
+	//	for (int j = 0; j < ngbr.size(); j++)
+	//	{
+	//		//o 在normals 中的索引
+	//		int indexOfO = ngbr[j].index;
+	//		//Coe 为F(o,s)
+	//		int Coe = ngbr[j].value;
+	//		coeStoO.push_back(TStoO(indexOfO * 3, i * 3, Coe));
+	//		coeStoO.push_back(TStoO(indexOfO * 3 + 1, i * 3 + 1, Coe));
+	//		coeStoO.push_back(TStoO(indexOfO * 3 + 1, i * 3 + 1, Coe));
+	//	}
+	//}
+	//matStoO.setFromTriplets(coeStoO.begin(), coeStoO.end());
+	//
+	delete ngbrs;
+	ngbrs = NULL;
+	
 
 	//计算f(x)和f(x)''(二阶导)
 	double * coefficient = NULL;
@@ -1068,7 +1155,7 @@ void Octree<Degree>::GreenMethod(void)
 	*sizeOfcoefficient = 0;
 
 
-
+	//
 	SortedTreeNodes sNodes;
 	
 	sNodes.set(tree, 1);
@@ -1094,9 +1181,424 @@ void Octree<Degree>::GreenMethod(void)
 		temp = tree.nextNode(temp);
 		num++;
 	}
-	printf("num of divergence %d\n",num);
+	printf("num of divergence %d  sizeOfcoefficient %d\n",num,*sizeOfcoefficient);
+	
+	FILE *fp_Green = fopen("Green.txt", "w");
+	maxLen = 0;
+	for (int i = 0; i < *sizeOfcoefficient; i++)
+	{
+		for (int k = 0; k < 7; k++)
+		{
+			//printf("%d\n", *(coefficient_EachLength + 7 * i + k));
+			if (*(coefficient_EachLength + i * 7 + k) > maxLen)
+			{
+				maxLen = *(coefficient_EachLength + i * 7 + k);
+			}
+			for (int j = 0; j < *(coefficient_EachLength + i*7+k); j++)
+			{
+				fprintf(fp_Green, "%f ", *(coefficient + (i*7+k)*size_col * 3 + j));
+			}
+			fprintf(fp_Green, "\n");
+		}
+
+	}
+	fclose(fp_Green);
+	printf("maxLen of Green is %d\n", maxLen);
+
+	typedef Eigen::Triplet<double> T;
+	//s->o (F(o,s)) s为行数
+	Eigen::SparseMatrix<double> matCoe(*sizeOfcoefficient * 7, normals_size * 3);
+	//Eigen::SparseMatrix<double> mat2(ngbrs_size * 3, *sizeOfcoefficient * 7);
+	//Eigen::SparseMatrix<double> mat3(ngbrs_size * 3, ngbrs_size * 3);
+	Eigen::SparseMatrix<double> mat2(normals_size * 3, *sizeOfcoefficient * 7);
+	Eigen::SparseMatrix<double> mat3(normals_size * 3, normals_size * 3);
+	Eigen::VectorXd b(*sizeOfcoefficient * 7), ATb(normals_size * 3), test(normals_size * 3);
+	Eigen::SimplicialLDLT<Eigen::SparseMatrix<double>> solver;
+	std::vector<T> coeffi;
+	
+	for (int i = 0; i < *sizeOfcoefficient ; i++)
+	{
+		//printf("%d\n", i);
+		for (int k = 0; k < 7; k++)
+		{
+			for (int j = 0; j < *(coefficient_EachLength + i*7+k); j++)
+			{
+			//	printf("%f %d\n", *(coefficient + (i * 7 + k)*size_col * 3 + j), *(coefficient_SampleIndex + (i * 7 + k)*size_col * 3 + j));
+				coeffi.push_back(T(i * 7 + k, *(coefficient_SampleIndex + (i * 7 + k)*size_col * 3 + j), *(coefficient + (i * 7 + k)*size_col * 3 + j)));
+			}
+		}
+	}
+	matCoe.setFromTriplets(coeffi.begin(), coeffi.end());
+	//Eigen::SparseMatrix<double> mat = matCoe*matStoO;
+	//Eigen::SparseMatrix<double> mat = matCoe;
+	//Eigen::VectorXd b(*sizeOfcoefficient * 7), ATb(ngbrs_size * 3);
+
+	mat2 = matCoe.transpose();
+	//mat2 = mat1.adjoint();
+	mat3 = mat2*matCoe;
+
+
+	
 	
 
+
+	for (int i = 0; i < *sizeOfcoefficient * 7; i++)
+	{
+		if (i % 7 == 0)
+		{
+			b[i] = 0.5;
+		}
+		else
+		{
+			b[i] = 0;
+		}
+
+	}
+
+
+
+	ATb = mat2*b;
+	Eigen::VectorXd x(normals_size * 3);
+	x = solver.compute(mat3).solve(ATb);
+	
+	FILE *fp_result = fopen("result.txt", "w");
+	for (int i = 0; i < normals_size; i++)
+	{
+		double len = sqrt(x[i * 3] * x[i * 3] + x[i * 3 + 1] * x[i * 3 + 1] + x[i * 3 + 2] * x[i * 3 + 2]);
+		fprintf(fp_result, "%f %f %f %f %f %f %f %f %f %f %f %f\n", Tnormal[3 * i], Tnormal[3 * i + 1], Tnormal[3 * i + 2], x[i * 3], x[i * 3 + 1], x[i * 3 + 2], x[i * 3] / len, x[i * 3 + 1] / len, x[i * 3 + 2] / len,ATb[i*3],ATb[i*3+1],ATb[i*3+2]);
+		//fprintf(fp, "%f %f %f\n", x[i * 3], x[i * 3 + 1], x[i * 3 + 2]);
+
+	}
+	test = mat3*x - ATb;
+	double norm_test = 0;
+	double norm_b = 0;
+	for (int i = 0; i < normals_size * 3; i++)
+	{
+		norm_test += test[i] * test[i];
+		norm_b += ATb[i] * ATb[i];
+	}
+	//std::cout << "error is " << sqrt(norm_test) / sqrt(norm_b) << std::endl;
+	printf("error is %f\n", sqrt(norm_test) / sqrt(norm_b));
+
+	delete normals;
+	normals = NULL;
+	free(divergence_normal_Value);
+	divergence_normal_Value = NULL;
+	free(divergence_normal_SampleIndex);
+	divergence_normal_SampleIndex = NULL;
+	free(divergence_normal_EachLength);
+	divergence_normal_EachLength = NULL;
+
+	free(coefficient);
+	coefficient = NULL;
+	free(coefficient_SampleIndex);
+	coefficient_SampleIndex = NULL;
+	free(coefficient_EachLength);
+	coefficient_EachLength = NULL;
+
+
+	//Eigen::VectorXd fx_right = matCoe*Tnormal;
+	Eigen::VectorXd fx_right = matCoe*x;
+	FILE *fp_right = fopen("fx_right.txt", "w");
+	for (int i = 0;i < fx_right.size(); i++)
+	{
+		fprintf(fp_right, "%f\n", fx_right[i]);
+	}
+	fclose(fp_right);
+
+
+	//MC实现
+	printf("MC start\n");
+	//std::cout << "MC start" << std::endl;
+	float xmin = 100;
+	float xmax = -100;
+	float ymin = 100;
+	float ymax = -100;
+	float zmin = 100;
+	float zmax = -100;
+	float width = 0;
+
+
+
+	//寻找坐标原点
+	temp = tree.nextNode();
+	num = 0;
+	while (temp)
+	{
+		if (temp->indexOfcoefficient == -1) {
+			temp = tree.nextNode(temp);
+			continue;
+		}
+		Point3D<Real> center2 = Point3D<Real>{ 0,0,0 };
+		Real width2 = 0;
+		temp->centerAndWidth(center2, width2);
+		width = width2;
+		float x = center2.coords[0];
+		float y = center2.coords[1];
+		float z = center2.coords[2];
+		if (x < xmin)
+		{
+			xmin = x;
+		}
+		if (x > xmax)
+		{
+			xmax = x;
+		}
+		if (y < ymin)
+		{
+			ymin = y;
+		}
+		if (y > ymax)
+		{
+			ymax = y;
+		}
+		if (z < zmin)
+		{
+			zmin = z;
+		}
+		if (z > zmax)
+		{
+			zmax = z;
+		}
+		temp = tree.nextNode(temp);
+		num++;
+	}
+	//printf("xim %f xmax %f ymin %f ymax %f zmin %f zmax %f\n", xmin, xmax, ymin, ymax, zmin, zmax);
+	//cout << xmin << " " << xmax << " " << ymin << " " << ymax << " " << zmin << " " << zmax << endl;
+	//printf("xmax-xmin/width %f (ymax-ymin)/width %f (zmax-zmin)/width %f\n", (xmax - xmin) / width, (ymax - ymin) / width, (zmax - zmin) / width);
+	//cout << (xmax - xmin) / width << " " << (ymax - ymin) / width << " " << (zmax - zmin) / width << endl;
+	int size_x = (xmax - xmin) / width;
+	int size_y = (ymax - ymin) / width;
+	int size_z = (zmax - zmin) / width;
+
+	//将数据变为整型索引存储,value表示fx_right
+	float *tranigles = NULL;
+	tranigles = (float *)malloc((size_x + 1)*(size_y + 1)*(size_z + 1) * sizeof(float));
+	if (NULL == tranigles)
+	{
+		printf("tranigles malloc failed\n");
+	}
+	memset(tranigles, 0, (size_x + 1)*(size_y + 1)*(size_z + 1) * sizeof(float));
+
+
+	temp = tree.nextNode();
+	num = 0;
+	while (temp)
+	{
+		if (temp->indexOfcoefficient == -1) {
+			temp = tree.nextNode(temp);
+			continue;
+		}
+		Point3D<Real> center2 = Point3D<Real>{ 0,0,0 };
+		Real width2 = 0;
+		temp->centerAndWidth(center2, width2);
+		width = width2;
+		int x = (center2.coords[0] - xmin) / width;
+		int y = (center2.coords[1] - ymin) / width;
+		int z = (center2.coords[2] - zmin) / width;
+		tranigles[x*size_y*size_z + y*size_z + z] = fx_right[temp->indexOfcoefficient * 7];
+		temp = tree.nextNode(temp);
+		num++;
+	}
+
+	printf("init data\n");
+	//std::cout << "init data" << std::endl;
+	//MC前数据初始化
+	int sizeSolution = *sizeOfcoefficient;
+	int indexOfCube = 0;
+	float *mcCubeValue = NULL;
+	mcCubeValue = (float *)malloc(sizeSolution * 8 * sizeof(float));
+	if (mcCubeValue == NULL)
+	{
+		printf("mcCubeValue malloc failed\n");
+	}
+	memset(mcCubeValue, 0, sizeSolution * 8 * sizeof(float));
+	//std::cout << sizeSolution << std::endl;
+	printf("%d\n", sizeSolution);
+
+
+
+	float* mcCubePosition = NULL;
+	mcCubePosition = (float *)malloc(sizeSolution * 4 * sizeof(float));
+	if (mcCubePosition == NULL)
+	{
+		printf("mcCubePosition malloc failed\n");
+	}
+
+	memset(mcCubePosition, 0, sizeSolution * 4 * sizeof(float));
+	int tempp = 0;
+
+
+
+	int* IsCube = NULL;
+	IsCube = (int *)malloc(sizeSolution * sizeof(int));
+	if (IsCube == NULL)
+	{
+		printf("IsCube malloc failed\n");
+	}
+	memset(IsCube, 0, sizeSolution * sizeof(int));
+	printf("start update data\n");
+	//std::cout << "start update data" << std::endl;
+	//更新数据
+	
+	temp = tree.nextNode();
+	num = 0;
+	while (temp)
+	{
+		if (temp->indexOfcoefficient == -1) {
+			temp = tree.nextNode(temp);
+			continue;
+		}
+		Point3D<Real> center2 = Point3D<Real>{ 0,0,0 };
+		Real width2 = 0;
+		temp->centerAndWidth(center2, width2);
+		width = width2;
+		//位置坐标变为索引
+		int x = (center2.coords[0] - xmin) / width;
+		int y = (center2.coords[1] - ymin) / width;
+		int z = (center2.coords[2] - zmin) / width;
+		
+		if (x < size_x  && y < size_y  && z < size_z)
+		{
+			if (abs(tranigles[x*size_y*size_z + y*size_z + z]) >0)
+			{
+				tempp++;
+			}
+			if (abs(tranigles[x*size_y*size_z + y*size_z + z + 1]) > 0)
+			{
+				tempp++;
+			}
+			if (abs(tranigles[x*size_y*size_z + (y + 1)*size_z + z])>0)
+			{
+				tempp++;
+			}
+			if (abs(tranigles[x*size_y*size_z + (y + 1)*size_z + z + 1])>0)
+			{
+				tempp++;
+			}
+			if (abs(tranigles[(x + 1)*size_y*size_z + y*size_z + z])>0)
+			{
+				tempp++;
+			}
+			if (abs(tranigles[(x + 1)*size_y*size_z + y*size_z + z + 1])>0)
+			{
+				tempp++;
+			}
+			if (abs(tranigles[(x + 1)*size_y*size_z + (y + 1)*size_z + z])>0)
+			{
+				tempp++;
+			}
+			if (abs(tranigles[(x + 1)*size_y*size_z + (y + 1)*size_z + z + 1]) >0)
+			{
+				tempp++;
+			}
+			//printf("%d\n", tempp);
+			if (tempp == 8)
+			{
+				mcCubePosition[num * 4] = center2.coords[0];
+				mcCubePosition[num * 4 + 1] = center2.coords[1];
+				mcCubePosition[num * 4 + 2] = center2.coords[2];
+				mcCubePosition[num * 4 + 3] = width;
+				for (int off_z = 0; off_z < 2; off_z++)
+				{
+					for (int off_y = 0; off_y< 2; off_y++)
+					{
+						for (int off_x = 0; off_x < 2; off_x++)
+						{
+							//cout << (off_z << 2) + (off_y << 1) + (off_x) << endl;
+							//cout << tranigles[(x + off_x)*size_y*size_z + (y + off_y)*size_z + (z + off_z)] << endl;
+							mcCubeValue[num * 8 + (off_z << 2) + (off_y << 1) + (off_x)] = tranigles[(x + off_x)*size_y*size_z + (y + off_y)*size_z + (z + off_z)];
+							//cout << indexOfCube * 8 + off_z << 2 + off_y << 1 + off_x << endl;
+							fprintf(fp_result, "%f ", mcCubeValue[num * 8 + (off_z << 2) + (off_y << 1) + (off_x)]);
+							//mcCubeValue[indexOfCube * 8 + (off_z << 2 + off_y << 1 + off_x)] = 1;
+						}
+					}
+				}
+				fprintf(fp_result, "\n");
+				IsCube[num] = 1;
+
+				indexOfCube++;
+			}
+		}
+		num++;
+		tempp = 0;
+		temp = tree.nextNode(temp);
+		
+	}
+	printf("indexOfCube %d\n", indexOfCube);
+	//std::cout << "indexOfCube" << indexOfCube << std::endl;
+
+	float *my_triangles = NULL;
+	my_triangles = (float *)malloc(sizeSolution * 5 * 3 * 3 * sizeof(float));
+	if (mcCubePosition == NULL)
+	{
+		printf("my_triangles malloc failed\n");
+	}
+	//else
+	//{
+	//	printf("my_triangles has malloced\n");
+	//}
+	memset(my_triangles, 0, sizeSolution * 5 * 3 * 3 * sizeof(float));
+
+	double iso = 0;
+	double valueSum = 0, weightsum = 0;
+	//for (int i = 0; i < samples.size(); i++)
+	//{
+	//	TreeOctNode *node = samples[i].node;
+	//	const ProjectiveData< OrientedPoint3D< Real >, Real >& sample = samples[i].sample;
+	//	int nodeIndexInSpare = normalField.nodeIndexInNormal(node);
+	//	Real w = sample.weight;
+	//	if (w > 0)
+	//	{
+	//		valueSum += fx_right[nodeIndexInSpare * 7] * w;
+	//		weightsum += w;
+	//	}
+	//	
+	//}
+	//iso = valueSum / weightsum;
+
+
+	//求 iosvalue
+	//FILE *fp_resultIn = NULL;
+	//fp_resultIn = fopen("surfaceValue.txt", "w");
+	//for (int i = 0; i < samples.size(); i++)
+	//{
+	//	TreeOctNode *node = samples[i].node;
+	//	int nodeIndexInSpare = normalField.nodeIndexInNormal(node);
+	//	fprintf(fp_resultIn, "%f\n", fx_right[nodeIndexInSpare * 7]);
+	//}
+	//fclose(fp_resultIn);
+	for (int k = 0; k < fx_right.size(); k++)
+	{
+		if (k % 7 == 0)
+		{
+			iso += fx_right[k];
+		}
+
+	}
+	iso = iso / (fx_right.size() / 7);
+	printf("iso %f\n", iso);
+	//std::cout << "iso" << iso << std::endl;
+	cudaError_t cudaStatus;
+
+	cudaFree(0);
+	cudaStatus = MC(mcCubeValue, IsCube, mcCubePosition, sizeSolution, my_triangles, iso);
+
+
+	char *outfile = "output.ply";
+	write_ply(my_triangles, sizeSolution * 5 * 3 * 3, outfile, IsCube);
+	free(mcCubePosition);
+	mcCubePosition = NULL;
+	free(mcCubeValue);
+	mcCubeValue = NULL;
+	free(IsCube);
+	IsCube = NULL;
+	free(my_triangles);
+	my_triangles = NULL;
+	free(sizeOfDivergence);
+	sizeOfDivergence = NULL;
+	free(sizeOfcoefficient);
+	sizeOfcoefficient = NULL;
 }
 
 
@@ -1155,10 +1657,24 @@ void Octree<Degree>::ComputeB(void)
 		df.index[1] = int(temp->off[1]);
 		df.index[2] = int(temp->off[2]);
 		TreeOctNode::ProcessNodeAdjacentNodesTocomputeB(fData.depth, temp, width, &tree, width, &df);
-		if (temp->indexOfdivergence != -1) { num++; }
+		//if (temp->indexOfdivergence != -1) { num++; }
+		num++;
 		temp = tree.nextNode(temp);
 	}
-	printf("num of divergence %d\n", num);
+	printf("num of divergence %d \n", num);
+	num = 0;
+	temp = tree.nextNode();
+	while (temp)
+	{
+		if (temp->b == 0)
+		{
+			temp = tree.nextNode(temp);
+			continue;
+		}
+		num++;
+		temp = tree.nextNode(temp);
+	}
+	printf("num of b %d \n", num);
 	fData.clearDotTables(fData.D_DOT_FLAG);
 
 	MemoryUsage();
@@ -1257,6 +1773,11 @@ void Octree<Degree>::MyDivergenceFuntion::Function(TreeOctNode *node1, const Tre
 	
 }
 
+bool cmp2(sortDiv a, sortDiv b)
+{
+	return a.index<b.index;//按照学号降序排列
+						   //return a.id<b.id;//按照学号升序排列
+}
 
 template<int Degree>
 void Octree<Degree>::GreenFunction::Function(TreeOctNode *node1, const TreeOctNode *node2, double *divergence_normal_Value, int *divergence_normal_SampleIndex, int * divergence_normal_EachLength, double *coefficient, int *coefficient_SampleIndex, int * coefficient_EachLength,int *sizeOfcoefficient, int column)
@@ -1265,12 +1786,12 @@ void Octree<Degree>::GreenFunction::Function(TreeOctNode *node1, const TreeOctNo
 	{
 		printf("GreenFunction %d\n", node1->depth());
 	}
-	
+
 	//node2为node1的邻居 更新node1
 	if (node1->indexOfcoefficient == -1)
 	{
 		node1->indexOfcoefficient = *sizeOfcoefficient;
-		++*(sizeOfcoefficient);
+		++ *sizeOfcoefficient;
 	}
 	Point3D<Real> &center1 = Point3D<Real>{ 0,0,0 };
 	Real width1=0;
@@ -1413,7 +1934,7 @@ void Octree<Degree>::GreenFunction::Function(TreeOctNode *node1, const TreeOctNo
 		//cout << "2" << endl;
 	}
 
-	int lamda = 1000;
+	int lamda = 100;
 	double LSValue[7] = { f,fxx / lamda,fxy / lamda,fxz / lamda,fyy / lamda,fyz / lamda,fzz / lamda };
 	double F = (center1.coords[0] - center2[0])*(center1.coords[0] - center2[0]) + (center1.coords[1] - center2[1])*(center1.coords[1] - center2[1]) + (center1.coords[2] - center2[2])*(center1.coords[2] - center2[2]);
 	double Fxx = (3 * pow((2 * center1.coords[0] - 2 * center2[0]), 2)) / (4 * pow(F, 2.5)) - 1 / (pow(F, 1.5));
@@ -1448,12 +1969,37 @@ void Octree<Degree>::GreenFunction::Function(TreeOctNode *node1, const TreeOctNo
 		//cout << 1 / sqrt(Green) << " " << diffOfGreen  << endl;
 		//for (int m = 0; m < *(diverence_normal_EachLength + _nodeIndexInSpare); m++)
 
+		sortDiv SD[900];
+		for (int i = 0; i < *(divergence_normal_EachLength + _nodeIndexInSpare);i++)
+		{ 
+			SD[i].value = *(divergence_normal_Value + _nodeIndexInSpare*column + i);
+			SD[i].index = *(divergence_normal_SampleIndex + _nodeIndexInSpare*column + i);
+		}
+		//printf("pre\n");
+		//for (int i = 0; i < 20; i++)
+		//{
+		//	printf("%d ",  SD[i].index);
+		//}
+		//printf("\n");
+		sort(SD, SD + *(divergence_normal_EachLength + _nodeIndexInSpare), cmp2);
+		//printf("pro\n");
+		//for (int i = 0; i < 20; i++)
+		//{
+		//	printf("%d ",  SD[i].index);
+		//}
+		//printf("\n");
+
 		while (div_green_Length<*(divergence_normal_EachLength + _nodeIndexInSpare))
 		{
 			//cout << *(diverence_normal_Value + _nodeIndexInSpare*size_col*3 + div_green_Length) << endl;
-			*(div_green_Value + div_green_Length) = *(divergence_normal_Value + _nodeIndexInSpare*column + div_green_Length)*(LSValue[indexLS])*width2*width2*width2;
+			//*(div_green_Value + div_green_Length) = *(divergence_normal_Value + _nodeIndexInSpare*column + div_green_Length)*(LSValue[indexLS])*width2*width2*width2;
+			
+			*(div_green_Value + div_green_Length) = SD[div_green_Length].value*(LSValue[indexLS])*width2*width2*width2;
+			*(div_green_SampleIndex + div_green_Length) = SD[div_green_Length].index;
+			
+			
 			//cout << *(diverence_normal_Value + nodeIndexInSpare*size_col*3 + div_green_Length) <<" "<<(1 / sqrt(Green) + diffOfGreen / 1000000)<< " "<< *(div_green_Value + div_green_Length) <<endl;
-			*(div_green_SampleIndex + div_green_Length) = *(divergence_normal_SampleIndex + _nodeIndexInSpare*column + div_green_Length);
+			//*(div_green_SampleIndex + div_green_Length) = *(divergence_normal_SampleIndex + _nodeIndexInSpare*column + div_green_Length);
 			++div_green_Length;
 		}
 		if (div_green_Length != *(divergence_normal_EachLength + _nodeIndexInSpare))
@@ -3180,4 +3726,57 @@ long long VertexData::EdgeIndex(const TreeOctNode* node,const int& eIndex,const 
 			break;
 	};
 	return (long long)(idx[0]) | (long long)(idx[1])<<15 | (long long)(idx[2])<<30;
+}
+template<int Degree>
+void Octree<Degree>::write_ply(float *triangles, int data_length, char *output_file, int *mcIsLeaf) {
+
+	std::fstream plyfile;
+	plyfile.open(output_file, std::fstream::out);
+	printf("Writing\n");
+	//std::cout << "Writing\n" << endl;
+	plyfile << "ply\nformat ascii 1.0\n";
+	plyfile << "element vertex                \n"; // need to come back and add amount of vertices
+	plyfile << "property float x\nproperty float y\nproperty float z\n";
+	plyfile << "element face                \n";// need to come back here and add amount of faces
+	plyfile << "property list uchar int vertex_index\n";
+	plyfile << "end_header\n";
+	int i = 0;
+	int edge_num = 0;
+	while (i<data_length - 3) {
+		//printf("%d \n",i );
+		if ((abs(triangles[i]) >10e-3)) {
+			/*if ((i%9==0) && i<data_length-10 && abs(triangles[i+1]) > 0.37 && triangles[i+4] >=  0.37 && triangles[i+7] >= 0.37)
+			{
+			i += 8;
+			}
+			else*/
+			{
+				plyfile << triangles[i] << " " << triangles[i + 1] << " " << triangles[i + 2] << "\n";
+				i += 2;
+				edge_num++;
+			}
+		}
+		i++;
+	}
+	printf("edge_num %d\n", edge_num);
+	//std::cout << "edge_num" << edge_num << endl;
+	int f = 0;
+	int x = 0;
+	while (f < edge_num / 3) {
+		plyfile << "3 " << x << " " << x + 1 << " " << x + 2 << "\n";
+		x += 3;
+		f++;
+	}
+	plyfile.clear();
+	plyfile.seekg(38, std::ios::beg);
+	plyfile << edge_num;
+	plyfile.seekg(122, std::ios::beg);
+	plyfile << edge_num / 3;
+	plyfile.seekg(0, std::ios::end);
+
+	plyfile.close();
+
+	printf("face num: %d\n", edge_num / 3);
+
+
 }
