@@ -200,6 +200,9 @@ extern PlyFile *ply_open_for_reading( char *, int *, char ***, int *, float *);
 extern PlyProperty **ply_get_element_description(PlyFile *, char *, int*, int*);
 extern void ply_get_element_setup( PlyFile *, char *, int, PlyProperty *);
 extern void ply_get_property(PlyFile *, char *, PlyProperty *);
+//***0
+extern int ply_get_propertyP(PlyFile *, char *, PlyProperty *);
+//***1
 extern PlyOtherProp *ply_get_other_properties(PlyFile *, char *, int);
 extern void ply_get_element(PlyFile *, void *);
 extern char **ply_get_comments(PlyFile *, int *);
@@ -219,7 +222,54 @@ extern int equal_strings(char *, char *);
 #endif
 #include "Geometry.h"
 #include <vector>
+//***0
 
+template< class Real > int PLYType(void);
+template<> inline int PLYType< int           >(void) { return PLY_INT; }
+template<> inline int PLYType<          char >(void) { return PLY_CHAR; }
+template<> inline int PLYType< unsigned char >(void) { return PLY_UCHAR; }
+template<> inline int PLYType<        float  >(void) { return PLY_FLOAT; }
+template<> inline int PLYType<        double >(void) { return PLY_DOUBLE; }
+template< class Real > inline int PLYType(void) { fprintf(stderr, "[ERROR] Unrecognized type\n"), exit(0); }
+
+
+
+template< class Real >
+class PlyOrientedVertexP
+{
+public:
+	typedef PlyOrientedVertexP Wrapper;
+
+	const static int ReadComponents = 6;
+	const static int WriteComponents = 6;
+	static PlyProperty ReadProperties[];
+	static PlyProperty WriteProperties[];
+
+	Point3D<Real> point, normal;
+
+	PlyOrientedVertexP(void) { ; }
+	PlyOrientedVertexP(Point3D< Real > p, Point3D< Real > n) : point(p), normal(n) { ; }
+	PlyOrientedVertexP operator + (PlyOrientedVertexP p) const { return PlyOrientedVertexP(point + p.point, normal + p.normal); }
+	PlyOrientedVertexP operator - (PlyOrientedVertexP p) const { return PlyOrientedVertexP(point - p.value, normal - p.normal); }
+	template< class _Real > PlyOrientedVertexP operator * (_Real s) const { return PlyOrientedVertexP(point*s, normal*s); }
+	template< class _Real > PlyOrientedVertexP operator / (_Real s) const { return PlyOrientedVertexP(point / s, normal / s); }
+	PlyOrientedVertexP& operator += (PlyOrientedVertexP p) { point += p.point, normal += p.normal; return *this; }
+	PlyOrientedVertexP& operator -= (PlyOrientedVertexP p) { point -= p.point, normal -= p.normal; return *this; }
+	template< class _Real > PlyOrientedVertexP& operator *= (_Real s) { point *= s, normal *= s; return *this; }
+	template< class _Real > PlyOrientedVertexP& operator /= (_Real s) { point /= s, normal /= s; return *this; }
+};
+
+
+template< class Real > PlyProperty PlyOrientedVertexP< Real >::ReadProperties[] =
+{
+	{ _strdup("x") , PLYType< Real >() , PLYType< Real >() , int(offsetof(PlyOrientedVertexP ,  point.coords[0])) , 0 , 0 , 0 , 0 },
+	{ _strdup("y") , PLYType< Real >() , PLYType< Real >() , int(offsetof(PlyOrientedVertexP ,  point.coords[1])) , 0 , 0 , 0 , 0 },
+	{ _strdup("z") , PLYType< Real >() , PLYType< Real >() , int(offsetof(PlyOrientedVertexP ,  point.coords[2])) , 0 , 0 , 0 , 0 },
+	{ _strdup("nx") , PLYType< Real >() , PLYType< Real >() , int(offsetof(PlyOrientedVertexP , normal.coords[0])) , 0 , 0 , 0 , 0 },
+	{ _strdup("ny") , PLYType< Real >() , PLYType< Real >() , int(offsetof(PlyOrientedVertexP , normal.coords[1])) , 0 , 0 , 0 , 0 },
+	{ _strdup("nz") , PLYType< Real >() , PLYType< Real >() , int(offsetof(PlyOrientedVertexP , normal.coords[2])) , 0 , 0 , 0 , 0 }
+};
+//***1
 int PlyWritePolygons(char* fileName,CoredMeshData* mesh,int file_type,const Point3D<float>& translate,const float& scale,char** comments=NULL,const int& commentNum=0);
 int PlyDefaultFileType(void);
 #endif /* !__PLY_H__ */

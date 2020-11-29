@@ -77,7 +77,7 @@ void OctNode<NodeData,Real>::setFullDepth(const int& maxDepth){
 }
 
 template <class NodeData,class Real>
-int OctNode<NodeData,Real>::initChildren(void){
+int OctNode<NodeData,Real>::initChildren(void (*Initializer)(OctNode&)){
 	int i,j,k;
 
 	if(UseAlloc){children=Allocator.newElements(8);}
@@ -99,6 +99,7 @@ int OctNode<NodeData,Real>::initChildren(void){
 				int idx=Cube::CornerIndex(i,j,k);
 				children[idx].parent=this;
 				children[idx].children=NULL;
+				if (Initializer) { Initializer(children[idx]); }
 				int off2[3];
 				off2[0]=(off[0]<<1)+i;
 				off2[1]=(off[1]<<1)+j;
@@ -1478,8 +1479,7 @@ void OctNode<NodeData,Real>::NeighborKey2::set(const int& d){
 	if(d<0){return;}
 	neighbors=new Neighbors2[d+1];
 }
-template<class NodeData,class Real>
-typename OctNode<NodeData,Real>::Neighbors2& OctNode<NodeData,Real>::NeighborKey2::getNeighbors(const OctNode<NodeData,Real>* node){
+template<class NodeData,class Real>typename OctNode<NodeData,Real>::Neighbors2& OctNode<NodeData,Real>::NeighborKey2::getNeighbors(const OctNode<NodeData,Real>* node){
 	int d=node->depth();
 	if(node!=neighbors[d].neighbors[1][1][1]){
 		neighbors[d].clear();

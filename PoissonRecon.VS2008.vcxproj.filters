@@ -95,6 +95,12 @@
     <ClInclude Include="Src\Vector.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="标头.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Src\PointStream.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="Src\FunctionData.inl">
@@ -119,6 +125,9 @@
       <Filter>Include Files</Filter>
     </None>
     <None Include="Src\Vector.inl">
+      <Filter>Include Files</Filter>
+    </None>
+    <None Include="Src\PointStream.inl">
       <Filter>Include Files</Filter>
     </None>
   </ItemGroup>

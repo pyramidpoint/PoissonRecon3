@@ -82,7 +82,7 @@ public:
 	static void AddScaled(const Polynomial& p1,const double& w1,const Polynomial& p2,const double& w2,Polynomial& q);
 	static void AddScaled(const Polynomial& p1,const Polynomial& p2,const double& w2,Polynomial& q);
 	static void AddScaled(const Polynomial& p1,const double& w1,const Polynomial& p2,Polynomial& q);
-
+	static void BSplineComponentValues(double x, double* values);
 	void getSolutions(const double& c,std::vector<double>& roots,const double& EPS) const;
 };
 

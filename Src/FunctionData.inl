@@ -224,6 +224,7 @@ void FunctionData<Degree,Real>::clearValueTables(void){
 template<int Degree,class Real>
 Real FunctionData<Degree,Real>::dotProduct(const double& center1,const double& width1,const double& center2,const double& width2) const{
 	double r=fabs(baseFunction.polys[0].start);
+	//baseFunction.printnl();
 	switch(normalize){
 		case 2:
 			return Real((baseFunction*baseFunction.scale(width2/width1).shift((center2-center1)/width1)).integral(-2*r,2*r)*width1/sqrt(width1*width2));

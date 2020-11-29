@@ -32,7 +32,7 @@ DAMAGE.
 #define NEW_SAMPLES_PER_NODE 1
 
 #include "Hash.h"
-
+#include "PointStream.h"
 typedef float Real;
 typedef float FunctionDataReal;
 typedef OctNode<class TreeNodeData,Real> TreeOctNode;
@@ -91,14 +91,18 @@ template<int Degree>
 class Octree{
 	TreeOctNode::NeighborKey neighborKey;	
 	TreeOctNode::NeighborKey2 neighborKey2;
-
+	//***0
+	static int _NodeCount;
+	
+	static void _NodeInitializer(TreeOctNode& node) { node.indexforSample = _NodeCount++; }
+	//***1
+	static bool _InBounds(Point3D< Real > p);
 	Real radius;
 	int width;
 	void setNodeIndices(TreeOctNode& tree,int& idx);
 	Real GetDotProduct(const int index[DIMENSION]) const;
 	Real GetLaplacian(const int index[DIMENSION]) const;
 	Real GetDivergence(const int index[DIMENSION],const Point3D<Real>& normal) const;
-
 	class DivergenceFunction{
 	public:
 		Point3D<Real> normal;
@@ -263,17 +267,28 @@ public:
 	Real postNormalSmooth;
 	TreeOctNode tree;
 	FunctionData<Degree,FunctionDataReal> fData;
+	struct PointSample { TreeOctNode* node; ProjectiveData< OrientedPoint3D< Real >, Real > sample; };
+
 	Octree(void);
 
 	void setFunctionData(const PPolynomial<Degree>& ReconstructionFunction,const int& maxDepth,const int& normalize,const Real& normalSmooth=-1);
 	void finalize1(const int& refineNeighbors=-1);
 	void finalize2(const int& refineNeighbors=-1);
-	int setTree(char* fileName,const int& maxDepth,const int& binary,const int& kernelDepth,const Real& samplesPerNode,
+	int setTree(std::vector< PointSample >& samples, char* fileName, const int& maxDepth, const int& binary, const int& kernelDepth, const Real& samplesPerNode,
+		const Real& scaleFactor, Point3D<Real>& center, Real& scale, const int& resetSampleDepths, const int& useConfidence);
+
+	/*int setTree(OrientedPointStream< Real >& pointStream,std::vector< PointSample >& samples,char* fileName,const int& maxDepth,const int& binary,const int& kernelDepth,const Real& samplesPerNode,
 		const Real& scaleFactor,Point3D<Real>& center,Real& scale,const int& resetSampleDepths,const int& useConfidence);
+	*///***
+	//***0
+	void setDensityEstimator(std::vector<PointSample>& samples, const int kernelDepth, Real samplesPerNode);
+	void normalField(std::vector< PointSample >& samples, const int& kernelDepth, const Real& samplesPerNode, const int& maxDepth);
+	//***1
 	void write_ply(float *triangles, int data_length, char *output_file, int *mcIsLeaf);
 	void SetLaplacianWeights(void);
 	void ComputeDivergence(void);
 	void ComputeB(void);
+	void getTreeSize(void);
 	void GreenMethod(void);
 	void ClipTree(void);
 	int LaplacianMatrixIteration(const int& subdivideDepth);
@@ -282,6 +297,8 @@ public:
 	void GetMCIsoTriangles(const Real& isoValue,CoredMeshData* mesh,const int& fullDepthIso=0,const int& nonLinearFit=1 , bool addBarycenter=false , bool polygonMesh=false );
 	void GetMCIsoTriangles(const Real& isoValue,const int& subdivideDepth,CoredMeshData* mesh,const int& fullDepthIso=0,const int& nonLinearFit=1 , bool addBarycenter=false , bool polygonMesh=false );
 };
-
+//***0
+template<int Degree > int Octree< Degree >::_NodeCount = 0;
+//***1
 #include "MultiGridOctreeData.inl"
 #endif // MULTI_GRID_OCTREE_DATA_INCLUDED

@@ -35,6 +35,7 @@ DAMAGE.
 #include<Eigen/Sparse>
 #include<Eigen/IterativeLinearSolvers>
 #include<Eigen/SparseCholesky>
+//#include<Eigen/RequiredModuleName>
 #include <cmath>
 #include "cuda_runtime.h"
 #include "device_launch_parameters.h"
@@ -169,6 +170,7 @@ int Octree<Degree>::NonLinearSplatOrientedPoint(TreeOctNode* node,const Point3D<
 						//printf("normals->size() %d\n", int(normals->size()));
 						normals->push_back(n);
 					}
+					//cout << Real(normal.coords[0] * dxdydz) << " " << Real(normal.coords[1] * dxdydz) << " " << Real(normal.coords[2] * dxdydz)<<endl;;
 					(*normals)[idx].coords[0]+=Real(normal.coords[0]*dxdydz);
 					(*normals)[idx].coords[1]+=Real(normal.coords[1]*dxdydz);
 					(*normals)[idx].coords[2]+=Real(normal.coords[2]*dxdydz);
@@ -206,6 +208,11 @@ void Octree<Degree>::NonLinearSplatOrientedPoint(const Point3D<Real>& position,c
 		}
 		int cIndex=TreeOctNode::CornerIndex(myCenter,position);
 		temp=&temp->children[cIndex];
+		Point3D< Real > start;
+		Real w;
+		
+		temp->centerAndWidth(start, w);
+		//cout << "start " << start[0] << " " << start[1] << " "<<start[2] << endl;
 		myWidth/=2;
 		if(cIndex&1){myCenter.coords[0]+=myWidth/2;}
 		else		{myCenter.coords[0]-=myWidth/2;}
@@ -216,7 +223,11 @@ void Octree<Degree>::NonLinearSplatOrientedPoint(const Point3D<Real>& position,c
 	}
 	Real alpha,newDepth;
 	NonLinearGetSampleDepthAndWeight(temp,position,samplesPerNode,newDepth,alpha);
-
+	Point3D<Real> center;
+	Real width1;
+	temp->centerAndWidth(center, width1);
+	//printf("%f %d %f %f %f %f %f\n", position[0], temp->depth(), center[0], center[1], center[2], alpha, newDepth);
+	//std::cout << position[0] << " " << temp->depth() << " " << center[0] << " " << center[1] << " " << center[2] << " " << alpha << " " << newDepth << endl;
 	if(newDepth<minDepth){newDepth=Real(minDepth);}
 	if(newDepth>maxDepth){newDepth=Real(maxDepth);}
 	int topDepth=int(ceil(newDepth));
@@ -259,8 +270,14 @@ template<int Degree>
 void Octree<Degree>::NonLinearGetSampleDepthAndWeight(TreeOctNode* node,const Point3D<Real>& position,const Real& samplesPerNode,Real& depth,Real& weight){
 	TreeOctNode* temp=node;
 	weight=Real(1.0)/NonLinearGetSampleWeight(temp,position);
+	//cout << weight << endl;
 #if NEW_SAMPLES_PER_NODE
-	if( weight>=samplesPerNode ) depth=Real( temp->depth()+log( weight/samplesPerNode )/log(double(1<<(DIMENSION-1))));
+	//***0
+	if (weight >= (Real)1.) depth = Real(temp->depth()  + log(weight) / log(double(1 << (DIMENSION - 1))));
+	//***1
+	//**p0
+	//if( weight>=samplesPerNode ) depth=Real( temp->depth()+log( weight/samplesPerNode )/log(double(1<<(DIMENSION-1))));
+	//**p1
 #else // !NEW_SAMPLES_PER_NODE
 	if(weight>=samplesPerNode+1){depth=Real(temp->depth()+log(weight/(samplesPerNode+1))/log(double(1<<(DIMENSION-1))));}
 #endif // NEW_SAMPLES_PER_NODE
@@ -268,7 +285,12 @@ void Octree<Degree>::NonLinearGetSampleDepthAndWeight(TreeOctNode* node,const Po
 		Real oldAlpha,newAlpha;
 		oldAlpha=newAlpha=weight;
 #if NEW_SAMPLES_PER_NODE
-		while(newAlpha<samplesPerNode && temp->parent){
+		//**p0
+		//while(newAlpha<samplesPerNode && temp->parent){
+		//**p1
+		//***0
+		while (newAlpha<(Real)1. && temp->parent) {
+		//***1
 #else // !NEW_SAMPLES_PER_NODE
 		while(newAlpha<(samplesPerNode+1) && temp->parent){
 #endif // NEW_SAMPLES_PER_NODE
@@ -277,7 +299,12 @@ void Octree<Degree>::NonLinearGetSampleDepthAndWeight(TreeOctNode* node,const Po
 			newAlpha=Real(1.0)/NonLinearGetSampleWeight(temp,position);
 		}
 #if NEW_SAMPLES_PER_NODE
-		depth=Real(temp->depth()+log(newAlpha/samplesPerNode)/log(newAlpha/oldAlpha));
+		//**p0
+		//depth=Real(temp->depth()+log(newAlpha/samplesPerNode)/log(newAlpha/oldAlpha));
+		//**p1
+		//***0
+		depth = Real(temp->depth() + log(newAlpha) / log(newAlpha / oldAlpha));
+		//***1
 #else // !NEW_SAMPLES_PER_NODE
 		depth=Real(temp->depth()+log(newAlpha/(samplesPerNode+1))/log(newAlpha/oldAlpha));
 #endif // NEW_SAMPLES_PER_NODE
@@ -341,25 +368,96 @@ int Octree<Degree>::NonLinearUpdateWeightContribution(TreeOctNode* node,const Po
 #if NEW_SAMPLES_PER_NODE
 		// Note that we are splatting along a co-dimension one manifold, so uniform point samples
 		// do not generate a unit sample weight.
-		dx[i][0] *= SAMPLE_SCALE;
+		//**p0
+		//dx[i][0] *= SAMPLE_SCALE;
+		//**p1
 #endif // NEW_SAMPLES_PER_NODE
 	}
+	//***0
+	//printf("%f\n", SAMPLE_SCALE);
+	//for (int m = 0; m < 3; m++)
+	//{
 
+	//	printf("%lf %lf %lf\n", dx[m][0], dx[m][1], dx[m][2]);
+
+	//}
+	//weight *= (Real)SAMPLE_SCALE;
+	//***1
 	for(i=0;i<3;i++){
 		for(j=0;j<3;j++){
-			dxdy=dx[0][i]*dx[1][j]*weight;
+			//**p0
+			//dxdy=dx[0][i]*dx[1][j]*weight;
+			//**p0
+			//***0
+			dxdy = dx[0][i] * dx[1][j] * weight*SAMPLE_SCALE;
+			//***1
 			for(k=0;k<3;k++){
 				if(neighbors.neighbors[i][j][k]){neighbors.neighbors[i][j][k]->nodeData.centerWeightContribution+=Real(dxdy*dx[2][k]);}
 			}
 		}
 	}
+	//cout << " start" <<w<< center[0]-w/2<<" "<< center[1] - w / 2 <<" "<< center[2] - w / 2 <<" "<< neighbors.neighbors[1][1][1]->nodeData.centerWeightContribution << endl;
+	//cout <<" addWeightContribution "<< neighbors.neighbors[1][1][1]->nodeData.centerWeightContribution << endl;
 	return 0;
 }
+template< int Degree > bool Octree< Degree >::_InBounds(Point3D< Real > p) { return p[0] >= Real(0.) && p[0] <= Real(1.0) && p[1] >= Real(0.) && p[1] <= Real(1.0) && p[2] >= Real(0.) && p[2] <= Real(1.0); }
+
+
+//***0
 
 template<int Degree>
-int Octree<Degree>::setTree(char* fileName,const int& maxDepth,const int& binary,
-							const int& kernelDepth,const Real& samplesPerNode,const Real& scaleFactor,Point3D<Real>& center,Real& scale,
-							const int& resetSamples,const int& useConfidence){
+void Octree<Degree>::setDensityEstimator(std::vector<PointSample>& samples, const int kernelDepth, Real samplesPerNode)
+{
+	int splatDepth = kernelDepth;
+	for (int i = 0; i<samples.size(); i++)
+	{
+		const TreeOctNode* node = samples[i].node;
+		const ProjectiveData< OrientedPoint3D< Real >, Real >& sample = samples[i].sample;
+		if (sample.weight>0)
+		{
+			Point3D< Real > p = sample.data.p / sample.weight;
+			Real w = sample.weight / samplesPerNode;
+			for (TreeOctNode* _node = (TreeOctNode*)node; _node; _node = _node->parent)
+			{
+				if (_node->depth() <= splatDepth)
+				{
+					NonLinearUpdateWeightContribution(_node, p, w);
+				}
+			}
+
+		}
+	}
+}
+
+
+template<int Degree>
+void Octree<Degree>::normalField(std::vector<PointSample>& samples, const int& kernelDepth, const Real& samplesPerNode, const int& maxDepth)
+{
+	FILE *fp = fopen("sample_pAndn.txt", "w");
+	int splatDepth = 0;
+	splatDepth = kernelDepth;
+	for (int i = 0; i < samples.size();i++)
+	{
+		const ProjectiveData< OrientedPoint3D< Real >, Real >& sample = samples[i].sample;
+		if (sample.weight > 0)
+		{
+			Point3D<Real> p = sample.data.p / sample.weight, n = sample.data.n;
+			fprintf(fp, "%f %f %f %f %f %f %f\n",sample.weight, p[0], p[1], p[2], n[0], n[1], n[2]);
+			if (!_InBounds(p)) { fprintf(stderr, "[WARNING] Octree:setNormalField: Point sample is out of bounds\n"); continue; }
+			NonLinearSplatOrientedPoint(p, n, splatDepth, samplesPerNode, 1, maxDepth);
+		}
+
+	}
+}
+//***1
+template<int Degree>
+//int Octree<Degree>::setTree(OrientedPointStream< Real >& pointStream,std::vector< PointSample >& samples,char* fileName,const int& maxDepth,const int& binary,
+//							const int& kernelDepth,const Real& samplesPerNode,const Real& scaleFactor,Point3D<Real>& center,Real& scale,
+//							const int& resetSamples,const int& useConfidence){
+//
+int Octree<Degree>::setTree(std::vector< PointSample >& samples, char* fileName, const int& maxDepth, const int& binary,
+	const int& kernelDepth, const Real& samplesPerNode, const Real& scaleFactor, Point3D<Real>& center, Real& scale,
+	const int& resetSamples, const int& useConfidence) {
 
 	Point3D<Real> min,max,position,normal,myCenter;
 	Real myWidth;
@@ -395,116 +493,197 @@ int Octree<Degree>::setTree(char* fileName,const int& maxDepth,const int& binary
 	DumpOutput("Samples: %d\n",cnt);
 	scale*=scaleFactor;
 	for(i=0;i<DIMENSION;i++){center.coords[i]-=scale/2;}
-	if(splatDepth>0){
-		DumpOutput("Setting sample weights\n");
-		cnt=0;
-		fseek(fp,SEEK_SET,0);
-		while(1){
-			if(binary){if(fread(c,sizeof(float),2*DIMENSION,fp)!=2*DIMENSION){break;}}
-			else{if(fscanf(fp," %f %f %f %f %f %f ",&c[0],&c[1],&c[2],&c[3],&c[4],&c[5])!=2*DIMENSION){break;}}
-			for(i=0;i<DIMENSION;i++){
-				position.coords[i]=(c[i]-center.coords[i])/scale;
-				normal.coords[i]=c[DIMENSION+i];
-			}
-			myCenter.coords[0]=myCenter.coords[1]=myCenter.coords[2]=Real(0.5);
-			myWidth=Real(1.0);
-			for(i=0;i<DIMENSION;i++){if(position.coords[i]<myCenter.coords[i]-myWidth/2 || position.coords[i]>myCenter.coords[i]+myWidth/2){break;}}
-			if(i!=DIMENSION){continue;}
-			temp=&tree;
-			int d=0;
-			Real weight=Real(1.0);
-			if(useConfidence){weight=Real(Length(normal));}
-			while(d<splatDepth){
-				NonLinearUpdateWeightContribution(temp,position,weight);
-				if(!temp->children){temp->initChildren();}
-				int cIndex=TreeOctNode::CornerIndex(myCenter,position);
-				temp=&temp->children[cIndex];
-				myWidth/=2;
-				if(cIndex&1){myCenter.coords[0]+=myWidth/2;}
-				else		{myCenter.coords[0]-=myWidth/2;}
-				if(cIndex&2){myCenter.coords[1]+=myWidth/2;}
-				else		{myCenter.coords[1]-=myWidth/2;}
-				if(cIndex&4){myCenter.coords[2]+=myWidth/2;}
-				else		{myCenter.coords[2]-=myWidth/2;}
-				d++;
-			}
-			NonLinearUpdateWeightContribution(temp,position,weight);
-			cnt++;
-		}
-	}
-
+	//**p0
+	//if(splatDepth>0){
+	//	DumpOutput("Setting sample weights\n");
+	//	cnt=0;
+	//	fseek(fp,SEEK_SET,0);
+	//	while(1){
+	//		if(binary){if(fread(c,sizeof(float),2*DIMENSION,fp)!=2*DIMENSION){break;}}
+	//		else{if(fscanf(fp," %f %f %f %f %f %f ",&c[0],&c[1],&c[2],&c[3],&c[4],&c[5])!=2*DIMENSION){break;}}
+	//		for(i=0;i<DIMENSION;i++){
+	//			position.coords[i]=(c[i]-center.coords[i])/scale;
+	//			normal.coords[i]=c[DIMENSION+i];
+	//		}
+	//		myCenter.coords[0]=myCenter.coords[1]=myCenter.coords[2]=Real(0.5);
+	//		myWidth=Real(1.0);
+	//		for(i=0;i<DIMENSION;i++){if(position.coords[i]<myCenter.coords[i]-myWidth/2 || position.coords[i]>myCenter.coords[i]+myWidth/2){break;}}
+	//		if(i!=DIMENSION){continue;}
+	//		temp=&tree;
+	//		int d=0;
+	//		Real weight=Real(1.0);
+	//		if(useConfidence){weight=Real(Length(normal));}
+	//		while(d<splatDepth){
+	//			NonLinearUpdateWeightContribution(temp,position,weight);
+	//			if(!temp->children){temp->initChildren();}
+	//			int cIndex=TreeOctNode::CornerIndex(myCenter,position);
+	//			temp=&temp->children[cIndex];
+	//			myWidth/=2;
+	//			if(cIndex&1){myCenter.coords[0]+=myWidth/2;}
+	//			else		{myCenter.coords[0]-=myWidth/2;}
+	//			if(cIndex&2){myCenter.coords[1]+=myWidth/2;}
+	//			else		{myCenter.coords[1]-=myWidth/2;}
+	//			if(cIndex&4){myCenter.coords[2]+=myWidth/2;}
+	//			else		{myCenter.coords[2]-=myWidth/2;}
+	//			d++;
+	//		}
+	//		NonLinearUpdateWeightContribution(temp,position,weight);
+	//		cnt++;
+	//	}
+	//}
+	//**p1
 	DumpOutput("Adding Points and Normals\n");
 	normals=new std::vector<Point3D<Real> >();
 	ngbrs = new std::vector<std::vector<ngbrCoe<Real>>>();
 	//std::vector<ngbrCoe<Real>> ngbr;
-
+	std::vector< int > nodeToIndexMap;
+	Point3D< Real > p, n;
+	//***0
+	//OrientedPoint3D< Real > _p;
+	//***1
 	cnt=0;
 	fseek(fp,SEEK_SET,0);
-	while(1){
-		if(binary){if(fread(c,sizeof(float),2*DIMENSION,fp)!=2*DIMENSION){break;}}
-		else{if(fscanf(fp," %f %f %f %f %f %f ",&c[0],&c[1],&c[2],&c[3],&c[4],&c[5])!=2*DIMENSION){break;}}
-		for(i=0;i<DIMENSION;i++){
-			position.coords[i]=(c[i]-center.coords[i])/scale;
-			normal.coords[i]=c[DIMENSION+i];
+	//**p0
+	while (1) {
+	//**p1
+
+	//***0
+	//while(pointStream.nextPoint(_p)){
+		//***1
+		//**p0
+		if (binary) { if (fread(c, sizeof(float), 2 * DIMENSION, fp) != 2 * DIMENSION) { break; } }
+		else { if (fscanf(fp, " %f %f %f %f %f %f ", &c[0], &c[1], &c[2], &c[3], &c[4], &c[5]) != 2 * DIMENSION) { break; } }
+		for (i = 0; i < DIMENSION; i++) {
+			position.coords[i] = (c[i] - center.coords[i]) / scale;
+			normal.coords[i] = c[DIMENSION + i];
 		}
-		myCenter.coords[0]=myCenter.coords[1]=myCenter.coords[2]=Real(0.5);
-		myWidth=Real(1.0);
-		for(i=0;i<DIMENSION;i++){if(position.coords[i]<myCenter.coords[i]-myWidth/2 || position.coords[i]>myCenter.coords[i]+myWidth/2){break;}}
-		if(i!=DIMENSION){continue;}
-		Real l=Real(Length(normal));
-		if(l!=l || l<EPSILON){continue;}
-		if(!useConfidence){
-			normal.coords[0]/=l;
-			normal.coords[1]/=l;
-			normal.coords[2]/=l;
+		myCenter.coords[0] = myCenter.coords[1] = myCenter.coords[2] = Real(0.5);
+		myWidth = Real(1.0);
+		for (i = 0; i < DIMENSION; i++) { if (position.coords[i]<myCenter.coords[i] - myWidth / 2 || position.coords[i]>myCenter.coords[i] + myWidth / 2) { break; } }
+		if (i != DIMENSION) { continue; }
+
+		//**p1
+
+		//***0
+		/*p = Point3D< Real >(_p.p), n = Point3D< Real >(_p.n);
+		Point3D< Real > mycenter = Point3D< Real >(Real(0.5), Real(0.5), Real(0.5));
+		Real mywidth = Real(1.0);*/
+		//***1
+
+		Real l = Real(Length(normal));
+		if (l != l || l < EPSILON) { continue; }
+		if (!useConfidence) {
+			//**p0
+			normal.coords[0] /= l;
+			normal.coords[1] /= l;
+			normal.coords[2] /= l;
+			//**p1
+			//***0
+			//n /= l;
+			//***1
 		}
-		l=Real(2<<maxDepth);
+	//	/*l=Real(2<<maxDepth);
+	//	normal.coords[0]*=l;
+	//	normal.coords[1]*=l;
+	//	normal.coords[2]*=l;*/
+		for (int i = 0; i < DIMENSION; i++)
+		{
+			p.coords[i] = position.coords[i];
+			n.coords[i] = normal.coords[i];
+		}
+		temp = &tree;
+		
+		int d = temp->depth();
+		//printf("%f %d %d\n ", p[0],d,cnt);
+		//std::cout << n[0] << " " << n[1] << " "<<n[2] << endl;
+		while (d < maxDepth)
+		{
+			if (!temp->children) {
+				//printf("nodeIndex of before %d \n", temp->indexforSample);
+				temp->initChildren(_NodeInitializer);
+				//printf("nodeIndex %d \n", temp->indexforSample);
+			}
+			int cIndex = TreeOctNode::CornerIndex(myCenter, p);
+			temp = temp->children + cIndex;
+			myWidth /= 2;
+			if (cIndex & 1) { myCenter.coords[0] += myWidth / 2; }
+			else { myCenter.coords[0] -= myWidth / 2; }
+			if (cIndex & 2) { myCenter.coords[1] += myWidth / 2; }
+			else { myCenter.coords[1] -= myWidth / 2; }
+			if (cIndex & 4) { myCenter.coords[2] += myWidth / 2; }
+			else { myCenter.coords[2] -= myWidth / 2; }
+			d++;
+
+		}
+		Real weight = (Real)(useConfidence ? l : 1.);
+		int nodeIndex = temp->indexforSample;
+		if (nodeIndex >= nodeToIndexMap.size()) nodeToIndexMap.resize(nodeIndex + 1, -1);
+		int idx = nodeToIndexMap[nodeIndex];
+		//printf("nodeIndex %d %d\n", nodeIndex,  cnt);
+		if (idx == -1)
+		{
+			//cout << nodeIndex << endl;
+			idx = (int)samples.size();
+			nodeToIndexMap[nodeIndex] = idx;
+			samples.resize(idx + 1), samples[idx].node = temp;
+
+		}
+		//std::cout << n[0] << " " << n[1] << " " << n[2] <<" "<<weight<< endl;
+		samples[idx].sample += ProjectiveData< OrientedPoint3D< Real >, Real >(OrientedPoint3D< Real >(p * weight, n * weight), weight);
+		cnt++;
+	}
+		/*l=Real(2<<maxDepth);
 		normal.coords[0]*=l;
 		normal.coords[1]*=l;
-		normal.coords[2]*=l;
+		normal.coords[2]*=l;*/
+		
 
-		if(resetSamples && samplesPerNode>0 && splatDepth){
-			//printf("11\n");
-			NonLinearSplatOrientedPoint(position,normal,splatDepth,samplesPerNode,1,maxDepth);
-		}
-		else{
-			Real alpha=1;
-			temp=&tree;
-			int d=0;
-			if(splatDepth){
-				while(d<splatDepth){
-					int cIndex=TreeOctNode::CornerIndex(myCenter,position);
-					temp=&temp->children[cIndex];
-					myWidth/=2;
-					if(cIndex&1){myCenter.coords[0]+=myWidth/2;}
-					else		{myCenter.coords[0]-=myWidth/2;}
-					if(cIndex&2){myCenter.coords[1]+=myWidth/2;}
-					else		{myCenter.coords[1]-=myWidth/2;}
-					if(cIndex&4){myCenter.coords[2]+=myWidth/2;}
-					else		{myCenter.coords[2]-=myWidth/2;}
-					d++;
-				}
-				alpha=NonLinearGetSampleWeight(temp,position);
-			}
-			for(i=0;i<DIMENSION;i++){normal.coords[i]*=alpha;}
-			while(d<maxDepth){
-				if(!temp->children){temp->initChildren();}
-				int cIndex=TreeOctNode::CornerIndex(myCenter,position);
-				temp=&temp->children[cIndex];
-				myWidth/=2;
-				if(cIndex&1){myCenter.coords[0]+=myWidth/2;}
-				else		{myCenter.coords[0]-=myWidth/2;}
-				if(cIndex&2){myCenter.coords[1]+=myWidth/2;}
-				else		{myCenter.coords[1]-=myWidth/2;}
-				if(cIndex&4){myCenter.coords[2]+=myWidth/2;}
-				else		{myCenter.coords[2]-=myWidth/2;}
-				d++;
-			}
-			NonLinearSplatOrientedPoint(temp,position,normal);
-		}
-	}
+	//	if(resetSamples && samplesPerNode>0 && splatDepth){
+	//		//printf("%d %d %d \n", resetSamples, samplesPerNode, splatDepth);
+	//		//printf("11\n");
+	//		NonLinearSplatOrientedPoint(position,normal,splatDepth,samplesPerNode,1,maxDepth);
+	//	}
+	//	else{
+	//		printf("11\n");
+	//		Real alpha=1;
+	//		temp=&tree;
+	//		int d=0;
+	//		if(splatDepth){
+	//			while(d<splatDepth){
+	//				int cIndex=TreeOctNode::CornerIndex(myCenter,position);
+	//				temp=&temp->children[cIndex];
+	//				myWidth/=2;
+	//				if(cIndex&1){myCenter.coords[0]+=myWidth/2;}
+	//				else		{myCenter.coords[0]-=myWidth/2;}
+	//				if(cIndex&2){myCenter.coords[1]+=myWidth/2;}
+	//				else		{myCenter.coords[1]-=myWidth/2;}
+	//				if(cIndex&4){myCenter.coords[2]+=myWidth/2;}
+	//				else		{myCenter.coords[2]-=myWidth/2;}
+	//				d++;
+	//			}
+	//			alpha=NonLinearGetSampleWeight(temp,position);
+	//		}
+	//		for(i=0;i<DIMENSION;i++){normal.coords[i]*=alpha;}
+	//		while(d<maxDepth){
+	//			if(!temp->children){temp->initChildren();}
+	//			int cIndex=TreeOctNode::CornerIndex(myCenter,position);
+	//			temp=&temp->children[cIndex];
+	//			myWidth/=2;
+	//			if(cIndex&1){myCenter.coords[0]+=myWidth/2;}
+	//			else		{myCenter.coords[0]-=myWidth/2;}
+	//			if(cIndex&2){myCenter.coords[1]+=myWidth/2;}
+	//			else		{myCenter.coords[1]-=myWidth/2;}
+	//			if(cIndex&4){myCenter.coords[2]+=myWidth/2;}
+	//			else		{myCenter.coords[2]-=myWidth/2;}
+	//			d++;
+	//		}
+	//		NonLinearSplatOrientedPoint(temp,position,normal);
+	//	}
+	//}
 	DumpOutput("Memory Usage: %.3f MB\n",float(MemoryUsage()));
+	
 	fclose(fp);
+	printf("%d\n", cnt);
 	return cnt;
 }
 
@@ -638,8 +817,8 @@ int Octree<Degree>::LaplacianMatrixIteration(const int& subdivideDepth){
 	SparseMatrix<float>::SetAllocator(MEMORY_ALLOCATOR_BLOCK_SIZE);
 
 	sNodes.treeNodes[0]->nodeData.value=0;
-	//for(i= 1;i<sNodes.maxDepth;i++){
-	for (i = sNodes.maxDepth-1; i<sNodes.maxDepth; i++) {
+	for(i= 1;i<sNodes.maxDepth;i++){
+	//for (i = sNodes.maxDepth-1; i<sNodes.maxDepth; i++) {
 		DumpOutput("Depth: %d/%d\n",i,sNodes.maxDepth-1);
 		t=Time();
 		if(subdivideDepth>0){iter+=SolveFixedDepthMatrix(i,subdivideDepth,sNodes);}
@@ -664,7 +843,7 @@ int Octree<Degree>::SolveFixedDepthMatrix(const int& depth,const SortedTreeNodes
 	gTime=Time();
 	V.Resize(sNodes.nodeCount[depth+1]-sNodes.nodeCount[depth]);
 	
-	//for(i=sNodes.nodeCount[depth];i<sNodes.nodeCount[depth+1];i++){V[i-sNodes.nodeCount[depth]]=sNodes.treeNodes[i]->nodeData.value;}
+	for(i=sNodes.nodeCount[depth];i<sNodes.nodeCount[depth+1];i++){V[i-sNodes.nodeCount[depth]]=sNodes.treeNodes[i]->nodeData.value;}
 	FILE *fp = NULL;
 	fp = fopen("b.txt", "w");
 	printf("Depth's nodeCount is %d and (Depth+1)'s nodeCount is %d\n",sNodes.nodeCount[depth], sNodes.nodeCount[depth + 1]);
@@ -672,7 +851,7 @@ int Octree<Degree>::SolveFixedDepthMatrix(const int& depth,const SortedTreeNodes
 	int num_nodeData = 0;
 	for (i = sNodes.nodeCount[depth]; i<sNodes.nodeCount[depth + 1]; i++) 
 	{ 
-		V[i - sNodes.nodeCount[depth]] = sNodes.treeNodes[i]->b;
+		//V[i - sNodes.nodeCount[depth]] = sNodes.treeNodes[i]->b;
 
 		if (depth==sNodes.maxDepth-1)
 		{
@@ -702,7 +881,7 @@ int Octree<Degree>::SolveFixedDepthMatrix(const int& depth,const SortedTreeNodes
 		fprintf(fp, "%f\n", Real(Solution[i - sNodes.nodeCount[depth]]));
 	}
 	for(i=sNodes.nodeCount[depth];i<sNodes.nodeCount[depth+1];i++){sNodes.treeNodes[i]->nodeData.value=Real(Solution[i-sNodes.nodeCount[depth]]);}
-	for (i = sNodes.nodeCount[depth]; i<sNodes.nodeCount[depth + 1]; i++) { sNodes.treeNodes[i]->b = Real(Solution[i - sNodes.nodeCount[depth]]); }
+	//for (i = sNodes.nodeCount[depth]; i<sNodes.nodeCount[depth + 1]; i++) { sNodes.treeNodes[i]->b = Real(Solution[i - sNodes.nodeCount[depth]]); }
 	myRadius=Real(radius+ROUND_EPS-0.5);
 	myRadius /=(1<<depth);
 
@@ -988,10 +1167,30 @@ void Octree<Degree>::SetLaplacianWeights(void){
 	normals=NULL;
 }
 
-
+template<int Degree>
+void Octree<Degree>::getTreeSize(void)
+{
+	TreeOctNode *temp;
+	int num = 0;
+	temp = tree.nextNode();
+	while (temp)
+	{
+		temp = tree.nextNode(temp);
+		num++;
+	}
+	printf("size of tree %d\n", num);
+}
 template<int Degree>
 void Octree<Degree>::GreenMethod(void)
 {
+	FILE *fp_V = fopen("V3_0.txt", "w");
+
+	for (int i = 0; i<normals->size(); i++)
+	{
+		Point3D< Real > fpV = (*normals)[i];
+		fprintf(fp_V, "%f %f %f\n", fpV[0], fpV[1], fpV[2]);
+	}
+	fclose(fp_V);
 	int ngbrs_size = ngbrs->size();
 	int normals_size = normals->size();
 	//int maxindex = 0;
@@ -1056,7 +1255,11 @@ void Octree<Degree>::GreenMethod(void)
 	{
 		Tnormal[i] = 0;
 	}
+	temp = tree.nextNode();
 
+	//输出样本*8的区域到V.txt
+
+	//printf("size of tree %d\n", Tree.Size);
 	temp = tree.nextNode();
 	int num = 0;
 	while (temp)
@@ -1077,7 +1280,7 @@ void Octree<Degree>::GreenMethod(void)
 		temp = tree.nextNode(temp);
 		num++;
 	}
-	printf("%d %d\n", *sizeOfDivergence,num); 
+	printf("*sizeOfDivergence %d num %d normals_size %d \n", *sizeOfDivergence,num,normals->size()); 
 	int maxLen = 0;
 	FILE *fp_Div = fopen("Divergence.txt", "w");
 	for (int i = 0; i < *sizeOfDivergence; i++)
@@ -1205,43 +1408,53 @@ void Octree<Degree>::GreenMethod(void)
 	fclose(fp_Green);
 	printf("maxLen of Green is %d\n", maxLen);
 
+
 	typedef Eigen::Triplet<double> T;
-	//s->o (F(o,s)) s为行数
-	Eigen::SparseMatrix<double> matCoe(*sizeOfcoefficient * 7, normals_size * 3);
-	//Eigen::SparseMatrix<double> mat2(ngbrs_size * 3, *sizeOfcoefficient * 7);
-	//Eigen::SparseMatrix<double> mat3(ngbrs_size * 3, ngbrs_size * 3);
+	Eigen::SparseMatrix<double> mat1(*sizeOfcoefficient * 7, normals_size * 3);
 	Eigen::SparseMatrix<double> mat2(normals_size * 3, *sizeOfcoefficient * 7);
 	Eigen::SparseMatrix<double> mat3(normals_size * 3, normals_size * 3);
-	Eigen::VectorXd b(*sizeOfcoefficient * 7), ATb(normals_size * 3), test(normals_size * 3);
+	//Eigen::LeastSquaresConjugateGradient<Eigen::SparseMatrix<double>> solver;
+	//Eigen::SimplicialLLT<Eigen::SparseMatrix<double>> solver;
 	Eigen::SimplicialLDLT<Eigen::SparseMatrix<double>> solver;
 	std::vector<T> coeffi;
-	
-	for (int i = 0; i < *sizeOfcoefficient ; i++)
+
+	for (int i = 0; i < *sizeOfcoefficient; i++)
 	{
-		//printf("%d\n", i);
-		for (int k = 0; k < 7; k++)
 		{
-			for (int j = 0; j < *(coefficient_EachLength + i*7+k); j++)
+			for (int k = 0; k < 7; k++)
 			{
-			//	printf("%f %d\n", *(coefficient + (i * 7 + k)*size_col * 3 + j), *(coefficient_SampleIndex + (i * 7 + k)*size_col * 3 + j));
-				coeffi.push_back(T(i * 7 + k, *(coefficient_SampleIndex + (i * 7 + k)*size_col * 3 + j), *(coefficient + (i * 7 + k)*size_col * 3 + j)));
+				for (int j = 0; j < *(coefficient_EachLength + i * 7 + k); j++)
+				{
+					//cout << nodeIndexInSpare << " " << *(coefficient_SampleIndex + nodeIndexInSpare*size_col*3 + j) << endl;
+					coeffi.push_back(T(i * 7 + k, *(coefficient_SampleIndex + (i * 7 + k)*size_col * 3 + j), *(coefficient + (i * 7 + k)*size_col * 3 + j)));
+					//cout << i << " " << *(coefficient_SampleIndex + i*size_col*3 + j) << " " << *(coefficient + i*size_col*3 + j) << ;
+				}
+
 			}
+
 		}
+
 	}
-	matCoe.setFromTriplets(coeffi.begin(), coeffi.end());
-	//Eigen::SparseMatrix<double> mat = matCoe*matStoO;
-	//Eigen::SparseMatrix<double> mat = matCoe;
-	//Eigen::VectorXd b(*sizeOfcoefficient * 7), ATb(ngbrs_size * 3);
-
-	mat2 = matCoe.transpose();
+	free(coefficient);
+	free(coefficient_EachLength);
+	free(coefficient_SampleIndex);
+	mat1.setFromTriplets(coeffi.begin(), coeffi.end());
+	cout << "coefficient has inited" << endl;
+	mat2 = mat1.transpose();
 	//mat2 = mat1.adjoint();
-	mat3 = mat2*matCoe;
+	mat3 = mat2*mat1;
+	//for (int i = 0; i < 100; i++)
+	//{
+	//	for (int j = 0; j < 10; j++)
+	//	{
+	//		printf("%f ", mat3.coeff(i, j));
+	//	}
+	//	printf("\n");
+	//}
+	Eigen::VectorXd b(*sizeOfcoefficient * 7), ATb(normals_size * 3), test(normals_size * 3);
 
 
-	
-	
-
-
+	//因为值都为0.5，因此不用再算一遍nodeIndexInSpare
 	for (int i = 0; i < *sizeOfcoefficient * 7; i++)
 	{
 		if (i % 7 == 0)
@@ -1254,13 +1467,19 @@ void Octree<Degree>::GreenMethod(void)
 		}
 
 	}
-
-
-
 	ATb = mat2*b;
-	Eigen::VectorXd x(normals_size * 3);
+
+	cout << "start solve equation" << endl;
+	Eigen::VectorXd x;
+
 	x = solver.compute(mat3).solve(ATb);
+	cout << "equation has solved" << endl;
+
+	Eigen::VectorXd fx_true = mat1*x;
+	//Eigen::VectorXd fx_right = mat1*x;
+	Eigen::VectorXd fx_right = mat1*Tnormal;
 	
+
 	FILE *fp_result = fopen("result.txt", "w");
 	for (int i = 0; i < normals_size; i++)
 	{
@@ -1269,16 +1488,26 @@ void Octree<Degree>::GreenMethod(void)
 		//fprintf(fp, "%f %f %f\n", x[i * 3], x[i * 3 + 1], x[i * 3 + 2]);
 
 	}
+	FILE *fp_test = fopen("test.txt", "w");
+	Eigen::VectorXd fx2 = mat3*x;
 	test = mat3*x - ATb;
+	for (int i = 0; i < size_sample * 3; i++)
+	{
+		fprintf(fp_test, "%f %f %f\n", fx2[i], ATb[i], test[i]);
+	}
+
 	double norm_test = 0;
 	double norm_b = 0;
-	for (int i = 0; i < normals_size * 3; i++)
+	for (int i = 0; i < size_sample * 3; i++)
 	{
 		norm_test += test[i] * test[i];
 		norm_b += ATb[i] * ATb[i];
 	}
-	//std::cout << "error is " << sqrt(norm_test) / sqrt(norm_b) << std::endl;
-	printf("error is %f\n", sqrt(norm_test) / sqrt(norm_b));
+	cout << "error is " << sqrt(norm_test) / sqrt(norm_b) << endl;
+
+	fclose(fp_test);
+
+
 
 	delete normals;
 	normals = NULL;
@@ -1289,20 +1518,21 @@ void Octree<Degree>::GreenMethod(void)
 	free(divergence_normal_EachLength);
 	divergence_normal_EachLength = NULL;
 
-	free(coefficient);
-	coefficient = NULL;
-	free(coefficient_SampleIndex);
-	coefficient_SampleIndex = NULL;
-	free(coefficient_EachLength);
-	coefficient_EachLength = NULL;
+	//free(coefficient);
+	//coefficient = NULL;
+	//free(coefficient_SampleIndex);
+	//coefficient_SampleIndex = NULL;
+	//free(coefficient_EachLength);
+	//coefficient_EachLength = NULL;
 
 
-	//Eigen::VectorXd fx_right = matCoe*Tnormal;
-	Eigen::VectorXd fx_right = matCoe*x;
+
 	FILE *fp_right = fopen("fx_right.txt", "w");
+
 	for (int i = 0;i < fx_right.size(); i++)
 	{
-		fprintf(fp_right, "%f\n", fx_right[i]);
+		//fprintf(fp_right, "%f %f %f\n",fx_true, fx_right[i],b[i]);
+		fprintf(fp_right, "%f\n",fx_right[i]);
 	}
 	fclose(fp_right);
 
@@ -1577,6 +1807,7 @@ void Octree<Degree>::GreenMethod(void)
 
 	}
 	iso = iso / (fx_right.size() / 7);
+	//iso = -10;
 	printf("iso %f\n", iso);
 	//std::cout << "iso" << iso << std::endl;
 	cudaError_t cudaStatus;
@@ -1720,9 +1951,6 @@ void Octree<Degree>::MyDivergenceFuntion::Function(TreeOctNode *node1, const Tre
 		BinaryNode<double>::CenterAndWidth(off2[i], c2[i], w2[i]);
 	}
 
-	//if (FunctionData<Degree, Real>::SymmetricIndex(index[0], int(node1->off[0]), scratch[0])) { n.coords[0] = -n.coords[0]; }
-	//if (FunctionData<Degree, Real>::SymmetricIndex(index[1], int(node1->off[1]), scratch[1])) { n.coords[1] = -n.coords[1]; }
-	//if (FunctionData<Degree, Real>::SymmetricIndex(index[2], int(node1->off[2]), scratch[2])) { n.coords[2] = -n.coords[2]; }
 
 	//计算散度
 	PPolynomial<Degree> basefunction = ot->fData.baseFunction;
@@ -1730,7 +1958,7 @@ void Octree<Degree>::MyDivergenceFuntion::Function(TreeOctNode *node1, const Tre
 	//printf("%f %f %f\n", base(c2), base(c1),basefunction((c1-c2)/w2));
 	PPolynomial<Degree - 1> dbasefunction1 = base1.derivative();
 
-	PPolynomial<Degree - 1> dbase = basefunction.derivative();
+	//PPolynomial<Degree - 1> dbase = basefunction.derivative();
 
 
 
@@ -1744,10 +1972,38 @@ void Octree<Degree>::MyDivergenceFuntion::Function(TreeOctNode *node1, const Tre
 	PPolynomial<Degree> base3 = basefunction.scale(w2[2]).shift(c2[2]);
 	//printf("%f %f %f\n", base(c2), base(c1),basefunction((c1-c2)/w2));
 	PPolynomial<Degree - 1> dbasefunction3 = base3.derivative();
+
+	//double Fx = dbasefunction1(c1[0])*base2(c1[1])*base3(c1[2]);
+	//double Fy = base1(c1[0])*dbasefunction2(c1[1])*base3(c1[2]);
+	//double Fz = base1(c1[0])*base2(c1[1])*dbasefunction3(c1[2]);
+	double Fx = 0;
+	double Fy = 0;
+	double Fz = 0;//产生随机数
+	int unitNumInResidue = 20;
+	srand((int)time(0));
+	Point3D<Real> &start = Point3D<Real>{0,0,0};
+	start.coords[0] = c1[0] - w1[0] / 2;
+	start.coords[1] = c1[1] - w1[1] / 2;
+	start.coords[2] = c1[2] - w1[2] / 2;
+	for (int m = 0; m < unitNumInResidue; m++)
+	{
+		double x_residue, y_residue, z_residue = 0;
+		x_residue = (rand() / (double)RAND_MAX)*(w1[0])+start.coords[0];
+		y_residue = (rand() / (double)RAND_MAX)*(w2[0])+start.coords[1];
+		z_residue = (rand() / (double)RAND_MAX)*(w1[2])+start.coords[2];
+		//cout << x_residue << " " << y_residue << " " << z_residue << " " << nodeIndexInSpare << " " << _nodeIndexInSpare << endl;
+
+		
+		Fx += dbasefunction1(x_residue)*base2(y_residue)*base3(z_residue);
+		Fy += base1(x_residue)*dbasefunction2(y_residue)*base3(z_residue);
+		Fz += base1(x_residue)*base2(y_residue)*dbasefunction3(z_residue);
+	}
+	Fx /= unitNumInResidue;
+	Fy /= unitNumInResidue;
+	Fz /= unitNumInResidue;
+
 	//divergence = dbasefunction1(c1[0])*base2(c1[1])*base3(c1[2])*n.coords[0] + base1(c1[0])*dbasefunction2(c1[1])*base3(c1[2])*n.coords[1] + base1(c1[0])*base2(c1[1])*dbasefunction3(c1[2])*n.coords[2];
-	double Fx = dbasefunction1(c1[0])*base2(c1[1])*base3(c1[2]);
-	double Fy = base1(c1[0])*dbasefunction2(c1[1])*base3(c1[2]);
-	double Fz = base1(c1[0])*base2(c1[1])*dbasefunction3(c1[2]);
+
 	//Fx Fy Fz为node function在x y z 方向上的导数 Fx=F1x'F1yF1z F=F1xF1yF1z
 	if (Fx||Fy||Fz)
 	{
@@ -1759,13 +2015,13 @@ void Octree<Degree>::MyDivergenceFuntion::Function(TreeOctNode *node1, const Tre
 		}
 		int indexOfdivergence = node1->indexOfdivergence;
 		//int nodeIndex = node2->nodeData.nodeIndex;
-		*(divergence_normal_Value + indexOfdivergence*column + *(divergence_normal_EachLength + indexOfdivergence)) = Fx;
+		*(divergence_normal_Value + indexOfdivergence*column + *(divergence_normal_EachLength + indexOfdivergence)) = -Fx;
 		*(divergence_normal_SampleIndex + indexOfdivergence*column + *(divergence_normal_EachLength + indexOfdivergence)) = nodeIndex * 3;
 		++*(divergence_normal_EachLength + indexOfdivergence);
-		*(divergence_normal_Value + indexOfdivergence*column + *(divergence_normal_EachLength + indexOfdivergence)) = Fy;
+		*(divergence_normal_Value + indexOfdivergence*column + *(divergence_normal_EachLength + indexOfdivergence)) = -Fy;
 		*(divergence_normal_SampleIndex + indexOfdivergence*column + *(divergence_normal_EachLength + indexOfdivergence)) = nodeIndex * 3 + 1;
 		++*(divergence_normal_EachLength + indexOfdivergence);
-		*(divergence_normal_Value + indexOfdivergence*column + *(divergence_normal_EachLength + indexOfdivergence)) = Fz;
+		*(divergence_normal_Value + indexOfdivergence*column + *(divergence_normal_EachLength + indexOfdivergence)) = -Fz;
 		*(divergence_normal_SampleIndex + indexOfdivergence*column + *(divergence_normal_EachLength + indexOfdivergence)) = nodeIndex * 3 + 2;
 		++*(divergence_normal_EachLength + indexOfdivergence);
 	}
@@ -1813,7 +2069,7 @@ void Octree<Degree>::GreenFunction::Function(TreeOctNode *node1, const TreeOctNo
 		start.coords[2] = center2[2] - width2 / 2;
 		//cout << start[0] << " " << start[1] << " " << start[2] << endl;
 		//将立方体中的格林函数分为球体和剩余部分 两部分来计算
-		double radius = width1 / 4;
+		double radius = width2 / 4;
 
 		double f_radius = 2 * PI*radius*radius;
 		double f_residue = 0;
@@ -1934,14 +2190,14 @@ void Octree<Degree>::GreenFunction::Function(TreeOctNode *node1, const TreeOctNo
 		//cout << "2" << endl;
 	}
 
-	int lamda = 100;
+	int lamda = 10000;
 	double LSValue[7] = { f,fxx / lamda,fxy / lamda,fxz / lamda,fyy / lamda,fyz / lamda,fzz / lamda };
 	double F = (center1.coords[0] - center2[0])*(center1.coords[0] - center2[0]) + (center1.coords[1] - center2[1])*(center1.coords[1] - center2[1]) + (center1.coords[2] - center2[2])*(center1.coords[2] - center2[2]);
 	double Fxx = (3 * pow((2 * center1.coords[0] - 2 * center2[0]), 2)) / (4 * pow(F, 2.5)) - 1 / (pow(F, 1.5));
 	int _nodeIndexInSpare = node2->indexOfdivergence;
 	int nodeIndexInSpare = node1->indexOfcoefficient;
 	//printf("center1 %f %f %f center2 %f %f %f nodeindex1 %d nodeindex2 %d\n", center1.coords[0], center1.coords[1], center1.coords[2], center2[0], center2[1], center2[2], node1->nodeData.nodeIndex, node2->nodeData.nodeIndex);
-	//printf("%f %f %f %f %f %f %f %f %f %d %d %d\n", 1 / (4 * PI*sqrt(F)), f, Fxx / lamda, fxx / lamda, fxy / lamda, fxz / lamda, fyy / lamda, fyz / lamda, fzz / lamda, nodeIndexInSpare, node1->indexOfdivergence,_nodeIndexInSpare);
+//	printf("%f %f %f %f %f %f %f %f %f %d %d %d\n", 1 / (4 * PI*sqrt(F)), f, Fxx / lamda, fxx / lamda, fxy / lamda, fxz / lamda, fyy / lamda, fyz / lamda, fzz / lamda, nodeIndexInSpare, node1->indexOfdivergence,_nodeIndexInSpare);
 
 
 
@@ -1993,7 +2249,7 @@ void Octree<Degree>::GreenFunction::Function(TreeOctNode *node1, const TreeOctNo
 		{
 			//cout << *(diverence_normal_Value + _nodeIndexInSpare*size_col*3 + div_green_Length) << endl;
 			//*(div_green_Value + div_green_Length) = *(divergence_normal_Value + _nodeIndexInSpare*column + div_green_Length)*(LSValue[indexLS])*width2*width2*width2;
-			
+			//printf("%d %f\n", indexLS,(LSValue[indexLS])*width2*width2*width2);
 			*(div_green_Value + div_green_Length) = SD[div_green_Length].value*(LSValue[indexLS])*width2*width2*width2;
 			*(div_green_SampleIndex + div_green_Length) = SD[div_green_Length].index;
 			
@@ -2131,7 +2387,7 @@ void Octree<Degree>::DivergenceFunction::computedivergence(TreeOctNode* node1, c
 	PPolynomial<Degree - 1> dbasefunction1 = base1.derivative();
 
 	PPolynomial<Degree - 1> dbase = basefunction.derivative();
-	
+	//basefunction.printnl();
 
 	
 	PPolynomial<Degree> base2 = basefunction.scale(w2[1]).shift(c2[1]);
@@ -2563,6 +2819,7 @@ void Octree<Degree>::getCornerValueAndNormal(const TreeOctNode* node,const int& 
 template<int Degree>
 Real Octree<Degree>::GetIsoValue(void){
 	if(this->width<=3){
+		FILE *fp = fopen("IsoValue.txt", "w");
 		TreeOctNode* temp;
 		Real isoValue,weightSum,w;
 
@@ -2571,15 +2828,27 @@ Real Octree<Degree>::GetIsoValue(void){
 
 		isoValue=weightSum=0;
 		temp=tree.nextNode();
-		while(temp){
+		while (temp) {
+			
+			/*if (temp->indexforSample == -1||temp->indexforSample>2264)
+			{
+				temp = tree.nextNode(temp);
+				continue;
+			}*/
+			
 			w=temp->nodeData.centerWeightContribution;
-			if(w>EPSILON){
-				isoValue+=getCenterValue(temp)*w;
+			if(w>EPSILON&&temp->indexforSample<2264&&temp->indexforSample>=0){
+				//double CenterValue= getCenterValue(temp)*w;
+				//w = 1;
+				double CenterValue = getCenterValue(temp)*w;
+				isoValue += CenterValue;
+				fprintf(fp, "%f\n", CenterValue);
 				weightSum+=w;
 			}
 			temp=tree.nextNode(temp);
 		}
 		return isoValue/weightSum;
+		//return isoValue;
 	}
 	else{
 		const TreeOctNode* temp;

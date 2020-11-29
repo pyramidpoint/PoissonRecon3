@@ -278,3 +278,18 @@ void Polynomial<Degree>::getSolutions(const double& c,std::vector<double>& roots
 		}
 	}
 }
+// The 0-th order B-spline values
+template< > void Polynomial< 0 >::BSplineComponentValues(double x, double* values) { values[0] = 1.; }
+// The Degree-th order B-spline
+template< int Degree > void Polynomial< Degree >::BSplineComponentValues(double x, double* values)
+{
+	const double Scale = 1. / Degree;
+	Polynomial< Degree - 1 >::BSplineComponentValues(x, values + 1);
+	values[0] = values[1] * (1. - x) * Scale;
+	for (int i = 1; i<Degree; i++)
+	{
+		double x1 = (x - i + Degree), x2 = (-x + i + 1);
+		values[i] = (values[i] * x1 + values[i + 1] * x2) * Scale;
+	}
+	values[Degree] *= x * Scale;
+}

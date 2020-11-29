@@ -105,10 +105,11 @@ public:
 	double b=0;
 	int indexOfdivergence = -1;
 	int indexOfcoefficient = -1;
+	int indexforSample=-1;
 
 	OctNode(void);
 	~OctNode(void);
-	int initChildren(void);
+	int initChildren(void(*Initializer)(OctNode&) = NULL);
 
 	void depthAndOffset(int& depth,int offset[3]) const; 
 	int depth(void) const;

@@ -1035,7 +1035,40 @@ Open a polygon file for reading.
 	  /* specify that the user wants this property */
 	  elem->store_prop[index] = STORE_PROP;
   }
-  
+  //***0
+  int ply_get_propertyP(
+	  PlyFile *plyfile,
+	  char *elem_name,
+	  PlyProperty *prop
+  )
+  {
+	  PlyElement *elem;
+	  PlyProperty *prop_ptr;
+	  int index;
+
+	  /* find information about the element */
+	  elem = find_element(plyfile, elem_name);
+	  plyfile->which_elem = elem;
+
+	  /* deposit the property information into the element's description */
+
+	  prop_ptr = find_property(elem, prop->name, &index);
+	  if (prop_ptr == NULL) {
+		  //		  fprintf (stderr, "Warning:  Can't find property '%s' in element '%s'\n",
+		  //			  prop->name, elem_name);
+		  //		  return;
+		  return 0;
+	  }
+	  prop_ptr->internal_type = prop->internal_type;
+	  prop_ptr->offset = prop->offset;
+	  prop_ptr->count_internal = prop->count_internal;
+	  prop_ptr->count_offset = prop->count_offset;
+
+	  /* specify that the user wants this property */
+	  elem->store_prop[index] = STORE_PROP;
+	  return 1;
+  }
+  //***1
   
   /******************************************************************************
   Read one element from the file.  This routine assumes that we're reading

@@ -129,15 +129,36 @@ void ShowUsage(char* ex)
 
 	printf("\t[--verbose]\n");
 }
+
+
+template< class Real >
+XForm4x4< Real > GetPointXForm(OrientedPointStream< Real >& stream, Real scaleFactor)
+{
+	Point3D< Real > min, max;
+	stream.boundingBox(min, max);
+	Point3D< Real > center = (max + min) / 2;
+	Real scale = std::max< Real >(max[0] - min[0], std::max< Real >(max[1] - min[1], max[2] - min[2]));
+	scale *= scaleFactor;
+	for (int i = 0; i<3; i++) center[i] -= scale / 2;
+	XForm4x4< Real > tXForm = XForm4x4< Real >::Identity(), sXForm = XForm4x4< Real >::Identity();
+	for (int i = 0; i<3; i++) sXForm(i, i) = (Real)(1. / scale), tXForm(3, i) = -center[i];
+	return sXForm * tXForm;
+}
+
 template<int Degree>
 int Execute(int argc,char* argv[])
 {
+	//***0
+	typedef OrientedPointStream< Real > PointStream;
+	typedef TransformedOrientedPointStream< Real > XPointStream;
+	//***1
 	int i;
 	cmdLineString In,Out;
 	cmdLineReadable Binary,Verbose,NoResetSamples,NoClipTree,Confidence,Manifold,PolygonMesh;
 	cmdLineInt Depth(8),SolverDivide(8),IsoDivide(8),Refine(3);
 	cmdLineInt KernelDepth;
-	cmdLineFloat SamplesPerNode(1.0f),Scale(1.1f);
+	//cmdLineFloat SamplesPerNode(1.0f),Scale(1.1f);
+	cmdLineFloat SamplesPerNode(1.5f), Scale(1.1f);
 	char* paramNames[]=
 	{
 		"in","depth","out","refine","noResetSamples","noClipTree",
@@ -213,14 +234,39 @@ int Execute(int argc,char* argv[])
 		fprintf(stderr,"KernelDepth can't be greater than Depth: %d <= %d\n",kernelDepth,Depth.value);
 		return EXIT_FAILURE;
 	}
+	//***0
+	/*XForm4x4< Real > xForm, iXForm;
+	xForm = XForm4x4< Real >::Identity();
+
+	std::vector< typename Octree< Degree >::PointSample >* samples = new std::vector< typename Octree< Degree >::PointSample >();
+
+	PointStream* pointStream;
+	char* ext = GetFileExtension(In.value);
+
+	if      (!strcasecmp(ext, "bnpts")) pointStream = new BinaryOrientedPointStream< Real, float >(In.value);
+	else if (!strcasecmp(ext, "ply"  )) pointStream = new    PLYOrientedPointStream< Real >(In.value);
+	else                                pointStream = new  ASCIIOrientedPointStream< Real >(In.value);
+	delete[] ext;
+	XPointStream _pointStream(xForm, *pointStream);
+	xForm = GetPointXForm(_pointStream, (Real)Scale.value) * xForm;
+	{
+		XPointStream _pointStream(xForm, *pointStream);
+		tree.setTree(_pointStream, *samples, In.value, Depth.value, Binary.set, kernelDepth, Real(SamplesPerNode.value), Scale.value, center, scale, !NoResetSamples.set, Confidence.set);
+	}
+*/
 
 
+	std::vector< typename Octree< Degree >::PointSample >* samples = new std::vector< typename Octree< Degree >::PointSample >();
 
 
+	//***1
 
+	tree.getTreeSize();
 	t=Time();
 #if 1
-	tree.setTree(In.value,Depth.value,Binary.set,kernelDepth,Real(SamplesPerNode.value),Scale.value,center,scale,!NoResetSamples.set,Confidence.set);
+	//***p0
+	tree.setTree(*samples,In.value,Depth.value,Binary.set,kernelDepth,Real(SamplesPerNode.value),Scale.value,center,scale,!NoResetSamples.set,Confidence.set);
+	//***p1
 #else
 if(Confidence.set){
 	tree.setTree(In.value,Depth.value,Binary.set,kernelDepth,Real(SamplesPerNode.value),Scale.value,center,scale,!NoResetSamples.set,0,1);
@@ -229,10 +275,30 @@ else{
 	tree.setTree(In.value,Depth.value,Binary.set,kernelDepth,Real(SamplesPerNode.value),Scale.value,center,scale,!NoResetSamples.set,0,0);
 }
 #endif
+
+	for (int i = 0; i < (int)samples->size(); i++) {
+		(*samples)[i].sample.data.n *= (Real)-1;
+	}
+
+	printf("treesize after init ");
+	tree.getTreeSize();
+
+	tree.setDensityEstimator(*samples, kernelDepth, Real(SamplesPerNode.value));
+	printf("treesize after setDensityEstimator ");
+	tree.getTreeSize();
+
+
+	tree.normalField(*samples, kernelDepth, Real(SamplesPerNode.value), Depth.value);
 	DumpOutput2(comments[commentNum++],"#             Tree set in: %9.1f (s), %9.1f (MB)\n",Time()-t,tree.maxMemoryUsage);
 	DumpOutput("Leaves/Nodes: %d/%d\n",tree.tree.leaves(),tree.tree.nodes());
 	DumpOutput("   Tree Size: %.3f MB\n",float(sizeof(TreeOctNode)*tree.tree.nodes())/(1<<20));
 	DumpOutput("Memory Usage: %.3f MB\n",float(MemoryInfo::Usage())/(1<<20));
+	tree.getTreeSize();
+	printf("%d\n", (*samples).size());
+
+
+
+
 
 	if(!NoClipTree.set){
 		t=Time();
@@ -241,20 +307,20 @@ else{
 		DumpOutput("Leaves/Nodes: %d/%d\n",tree.tree.leaves(),tree.tree.nodes());
 		DumpOutput("   Tree Size: %.3f MB\n",float(sizeof(TreeOctNode)*tree.tree.nodes())/(1<<20));
 	}
-
+	tree.getTreeSize();
 	t=Time();
 	tree.finalize1(Refine.value);
 	DumpOutput("Finalized 1 In: %lg\n",Time()-t);
 	DumpOutput("Leaves/Nodes: %d/%d\n",tree.tree.leaves(),tree.tree.nodes());
 	DumpOutput("Memory Usage: %.3f MB\n",float(MemoryInfo::Usage())/(1<<20));
 	
+	
 
-
-	t = Time();
-	tree.maxMemoryUsage = 0;
-	tree.GreenMethod();
-	DumpOutput2(comments[commentNum++], "#ComputeDivergence Set In: %9.1f (s), %9.1f (MB)\n", Time() - t, tree.maxMemoryUsage);
-	DumpOutput("Memory Usage: %.3f MB\n", float(MemoryInfo::Usage()) / (1 << 20));
+	//t = Time();
+	//tree.maxMemoryUsage = 0;
+	//tree.GreenMethod();
+	//DumpOutput2(comments[commentNum++], "#ComputeDivergence Set In: %9.1f (s), %9.1f (MB)\n", Time() - t, tree.maxMemoryUsage);
+	//DumpOutput("Memory Usage: %.3f MB\n", float(MemoryInfo::Usage()) / (1 << 20));
 
 
 	//t = Time();
@@ -269,43 +335,56 @@ else{
 	//tree.ComputeB();
 	//DumpOutput2(comments[commentNum++], "#ComputeB Set In: %9.1f (s), %9.1f (MB)\n", Time() - t, tree.maxMemoryUsage);
 	//DumpOutput("Memory Usage: %.3f MB\n", float(MemoryInfo::Usage()) / (1 << 20));
+	
+	
+	//printf("Before SetLaplacianWeights: TreeSize \n");
+	//tree.getTreeSize();
 
-	//t=Time();
-	//tree.maxMemoryUsage=0;
-	//tree.SetLaplacianWeights();
-	//DumpOutput2(comments[commentNum++],"#Laplacian Weights Set In: %9.1f (s), %9.1f (MB)\n",Time()-t,tree.maxMemoryUsage);
-	//DumpOutput("Memory Usage: %.3f MB\n",float(MemoryInfo::Usage())/(1<<20));
+	t=Time();
+	tree.maxMemoryUsage=0;
+	tree.SetLaplacianWeights();
+	DumpOutput2(comments[commentNum++],"#Laplacian Weights Set In: %9.1f (s), %9.1f (MB)\n",Time()-t,tree.maxMemoryUsage);
+	DumpOutput("Memory Usage: %.3f MB\n",float(MemoryInfo::Usage())/(1<<20));
 
-	//t=Time();
-	//tree.finalize2(Refine.value);
-	//DumpOutput("Finalized 2 In: %lg\n",Time()-t);
-	//DumpOutput("Leaves/Nodes: %d/%d\n",tree.tree.leaves(),tree.tree.nodes());
-	//DumpOutput("Memory Usage: %.3f MB\n",float(MemoryInfo::Usage())/(1<<20));
+	printf("Before finalize2: TreeSize \n");
+	tree.getTreeSize();
 
-	//tree.maxMemoryUsage=0;
-	//t=Time();
-	//tree.LaplacianMatrixIteration(SolverDivide.value);
-	//DumpOutput2(comments[commentNum++],"# Linear System Solved In: %9.1f (s), %9.1f (MB)\n",Time()-t,tree.maxMemoryUsage);
-	//DumpOutput("Memory Usage: %.3f MB\n",float(MemoryInfo::Usage())/(1<<20));
+	t=Time();
+	tree.finalize2(Refine.value);
+	DumpOutput("Finalized 2 In: %lg\n",Time()-t);
+	DumpOutput("Leaves/Nodes: %d/%d\n",tree.tree.leaves(),tree.tree.nodes());
+	DumpOutput("Memory Usage: %.3f MB\n",float(MemoryInfo::Usage())/(1<<20));
 
-	//CoredVectorMeshData mesh;
-	//tree.maxMemoryUsage=0;
-	//t=Time();
-	//isoValue=tree.GetIsoValue();
-	//DumpOutput("Got average in: %f\n",Time()-t);
-	//DumpOutput("Iso-Value: %e\n",isoValue);
-	//DumpOutput("Memory Usage: %.3f MB\n",float(tree.MemoryUsage()));
+	printf("Before LaplacianMatrixIteration: TreeSize \n");
+	tree.getTreeSize();
 
-	//t=Time();
-	//if(IsoDivide.value) tree.GetMCIsoTriangles( isoValue , IsoDivide.value , &mesh , 0 , 1 , Manifold.set , PolygonMesh.set );
-	//else                tree.GetMCIsoTriangles( isoValue ,                   &mesh , 0 , 1 , Manifold.set , PolygonMesh.set );
-	//if( PolygonMesh.set ) DumpOutput2(comments[commentNum++],"#         Got Polygons in: %9.1f (s), %9.1f (MB)\n",Time()-t,tree.maxMemoryUsage);
-	//else                  DumpOutput2(comments[commentNum++],"#        Got Triangles in: %9.1f (s), %9.1f (MB)\n",Time()-t,tree.maxMemoryUsage);
-	//DumpOutput2(comments[commentNum++],"#              Total Time: %9.1f (s)\n",Time()-tt);
-	//PlyWritePolygons(Out.value,&mesh,PLY_BINARY_NATIVE,center,scale,comments,commentNum);
+	tree.maxMemoryUsage=0;
+	t=Time();
+	tree.LaplacianMatrixIteration(SolverDivide.value);
+	DumpOutput2(comments[commentNum++],"# Linear System Solved In: %9.1f (s), %9.1f (MB)\n",Time()-t,tree.maxMemoryUsage);
+	DumpOutput("Memory Usage: %.3f MB\n",float(MemoryInfo::Usage())/(1<<20));
+
+	printf("Before GetIsoValue: TreeSize \n");
+	tree.getTreeSize();
+
+	CoredVectorMeshData mesh;
+	tree.maxMemoryUsage=0;
+	t=Time();
+	isoValue=tree.GetIsoValue();
+	DumpOutput("Got average in: %f\n",Time()-t);
+	DumpOutput("Iso-Value: %e\n",isoValue);
+	DumpOutput("Memory Usage: %.3f MB\n",float(tree.MemoryUsage()));
+
+	t=Time();
+	if(IsoDivide.value) tree.GetMCIsoTriangles( isoValue , IsoDivide.value , &mesh , 0 , 1 , Manifold.set , PolygonMesh.set );
+	else                tree.GetMCIsoTriangles( isoValue ,                   &mesh , 0 , 1 , Manifold.set , PolygonMesh.set );
+	if( PolygonMesh.set ) DumpOutput2(comments[commentNum++],"#         Got Polygons in: %9.1f (s), %9.1f (MB)\n",Time()-t,tree.maxMemoryUsage);
+	else                  DumpOutput2(comments[commentNum++],"#        Got Triangles in: %9.1f (s), %9.1f (MB)\n",Time()-t,tree.maxMemoryUsage);
+	DumpOutput2(comments[commentNum++],"#              Total Time: %9.1f (s)\n",Time()-tt);
+	PlyWritePolygons(Out.value,&mesh,PLY_BINARY_NATIVE,center,scale,comments,commentNum);
 
 
-	//return 1;
+	return 1;
 }
 
 int main(int argc,char* argv[])

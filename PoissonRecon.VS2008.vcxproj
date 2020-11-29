@@ -196,17 +196,20 @@
     <ClInclude Include="Src\MultiGridOctreeData.h" />
     <ClInclude Include="Src\Octree.h" />
     <ClInclude Include="Src\ply.h" />
+    <ClInclude Include="Src\PointStream.h" />
     <ClInclude Include="Src\Polynomial.h" />
     <ClInclude Include="Src\PPolynomial.h" />
     <ClInclude Include="Src\SparseMatrix.h" />
     <ClInclude Include="Src\Time.h" />
     <ClInclude Include="Src\Vector.h" />
+    <ClInclude Include="标头.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="Src\FunctionData.inl" />
     <None Include="Src\Geometry.inl" />
     <None Include="Src\MultiGridOctreeData.inl" />
     <None Include="Src\Octree.inl" />
+    <None Include="Src\PointStream.inl" />
     <None Include="Src\Polynomial.inl" />
     <None Include="Src\PPolynomial.inl" />
     <None Include="Src\SparseMatrix.inl" />
